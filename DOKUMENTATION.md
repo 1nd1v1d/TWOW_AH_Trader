@@ -180,7 +180,7 @@ idle → splitting → split_wait → placing → confirming → (nächster Stac
 - **splitting**: Sucht einen passenden Stack in den Taschen. Wenn ein Stack mit exakt der gewünschten Größe existiert, wird er direkt verwendet. Andernfalls wird via `SplitContainerItem(bag, slot, count)` in einen leeren Taschenslot aufgeteilt (Bag-to-Bag-Split nach aux-addon-Muster)
 - **split_wait**: Pollt den Ziel-Slot (0,1 s Intervall) bis die korrekte Itemanzahl vorhanden ist (max 3 s Timeout). Erst wenn der Split abgeschlossen ist, wird fortgefahren
 - **placing**: Platziert das Item im AH-Sell-Slot nach dem aux-addon-Muster: `ClearCursor → ClickAuctionSellItemButton → ClearCursor → PickupContainerItem(bag, slot) → ClickAuctionSellItemButton → ClearCursor`
-- **confirming**: Wartet auf `NEW_AUCTION_UPDATE` (max 3 s Timeout), dann `StartAuction()` aufrufen
+- **confirming**: Pollt `GetAuctionSellItemInfo()` (0,2 s Intervall) bis das Item im Sell-Slot erkannt wird (max 3 s Timeout), dann `StartAuction()` aufrufen
 - Pro Stack wird ein separater Auktionseintrag erstellt
 - Preisberechnung: Aktueller AH-Preis − 1c Undercut, mindestens Zutatenkosten × 1,05, Fallback ohne AH-Preis: Kosten × 1,20
 - Deposit wird vor dem Posten geprüft (Goldcheck)
@@ -195,10 +195,9 @@ Beim Shift+Rechtsklick auf einen Trank öffnet sich ein Dialog mit:
 - **Stackgröße**: Eingabefeld + Preset-Buttons (1, 5, 10, 20)
 - **Stacks**: Maximale Anzahl Auktionen (leer = alle)
 - **Ergebnis-Vorschau**: Zeigt `→ X Auktionen (Y Stück)` live
-- **Preis prüfen**: Scannt den aktuellen AH-Preis des Tranks und zeigt Differenz zum Post-Preis
-  - Grün: „X günstiger als AH"
+- **Preis prüfen**: Scannt den aktuellen AH-Preis des Tranks und zeigt Differenz zum Post-Preis. Wenn der aktuelle AH-Preis günstiger ist, wird der Post-Preis automatisch auf einen neuen Undercut aktualisiert
+  - Grün: „X günstiger als AH" (ggf. nach automatischer Preiskorrektur)
   - Gelb: „Gleicher Preis"
-  - Rot: „X teurer als AH"
 
 Die Stacks werden via Bag-to-Bag-Split aufgeteilt (nach aux-addon-Muster): `SplitContainerItem` teilt in einen leeren Taschenslot, der Ziel-Slot wird gepollt bis die korrekte Menge vorhanden ist, dann wird der fertige Stack ins AH platziert. Ein 20er-Stack wird z.B. in 4×5er Auktionen gepostet.
 
@@ -284,8 +283,9 @@ SavedVariable `TWOW_AHT_DB` speichert:
 - Alle UI-Strings über `AHT.L["key"]` statt hardcoded
 - **Bugfix**: `GetAuctionDeposit()` existiert nicht in vanilla 1.12.1 – durch manuelle Berechnung ersetzt
 - **Post-Dialog**: Shift+Rechtsklick öffnet Dialog mit Stackgröße (1/5/10/20), Stackanzahl, Preis-Vorschau und Live-AH-Preisabfrage
-- **Preis prüfen**: Button im Post-Dialog scannt aktuellen AH-Preis und zeigt Differenz zum berechneten Post-Preis
-- **Stack-Splitting**: `SplitContainerItem` für beliebige Stackgrößen beim Posten
+- **Preis prüfen**: Button im Post-Dialog scannt aktuellen AH-Preis und zeigt Differenz zum berechneten Post-Preis. Bei günstigerem AH-Preis wird der Post-Preis automatisch auf neuen Undercut korrigiert
+- **Stack-Splitting**: `SplitContainerItem` für beliebige Stackgrößen beim Posten (Bag-to-Bag nach aux-addon-Muster)
+- **Bugfix**: Poster-Confirming nutzt jetzt Polling statt Event-basiert (verhindert verpasste `NEW_AUCTION_UPDATE` Events)
 
 ### v1.3.0 – 2026-04-03
 **Suchfeld, Sortierung, Aktualisierungszeitpunkt, Datenanzeige:**
