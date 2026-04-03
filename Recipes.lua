@@ -19,6 +19,10 @@ function AHT:LearnRecipes()
     -- Re-Entry-Schutz: verhindert mehrfache gleichzeitige Ausfuehrung
     if AHT._learningRecipes then return end
     AHT._learningRecipes = true
+    -- Retry-Zaehler zuruecksetzen wenn vom Event aufgerufen (nicht vom Retry)
+    if not AHT._recipeRetryPending then
+        AHT._recipeRetryCount = 0
+    end
 
     local tradeSkillName = GetTradeSkillLine()
     if not tradeSkillName or not ALCHEMY_NAMES[tradeSkillName] then
@@ -48,10 +52,12 @@ function AHT:LearnRecipes()
                 local rName, rTexture, rCount, rPlayerCount = GetTradeSkillReagentInfo(i, r)
                 if not rName or rName == "" then
                     -- Item nicht im Cache: versuche Name aus ItemLink zu extrahieren
-                    local link = GetTradeSkillReagentItemLink(i, r)
-                    if link then
-                        local _, _, linkName = strfind(link, "%[(.-)%]")
-                        if linkName then rName = linkName end
+                    if GetTradeSkillReagentItemLink then
+                        local link = GetTradeSkillReagentItemLink(i, r)
+                        if link then
+                            local _, _, linkName = strfind(link, "%[(.-)%]")
+                            if linkName then rName = linkName end
+                        end
                     end
                 end
                 if rName and rName ~= "" then
@@ -101,10 +107,13 @@ function AHT:LearnRecipes()
         end
     end
 
-    -- Bei fehlenden Reagenzien: verzoegerter Retry (Item-Cache nachladen)
+    -- Bei fehlenden Reagenzien: verzoegerter Retry (Item-Cache nachladen, max 3x)
     if needsRetry and not AHT._recipeRetryPending then
-        AHT._recipeRetryPending = true
-        AHT._recipeRetryTimer = 0
+        AHT._recipeRetryCount = (AHT._recipeRetryCount or 0) + 1
+        if AHT._recipeRetryCount <= 3 then
+            AHT._recipeRetryPending = true
+            AHT._recipeRetryTimer = 0
+        end
     end
 end
 

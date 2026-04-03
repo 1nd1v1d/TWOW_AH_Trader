@@ -26,6 +26,7 @@ AHT.buyListIdx      = 0         -- Aktueller Index in buyList
 AHT.buyPage         = 0         -- AH-Seite
 AHT.buyTimer        = 0
 AHT.buyLocked       = false     -- Wird gesetzt waehrend PlaceAuctionBid laeuft
+AHT.buyPendingOffer = nil       -- Angebot das gerade gekauft wird (fuer Zaehler-Korrektur)
 AHT.buyTotalSpent   = 0         -- Kupfer insgesamt ausgegeben
 AHT.buyItemsBought  = 0         -- Stueck insgesamt gekauft
 AHT.buySentTimer    = 0
@@ -35,6 +36,7 @@ AHT.buyTargetPPU    = 0         -- Optimaler max PPU (berechnet nach Phase 1)
 
 local BUY_DELAY     = 0.4
 local BUY_TIMEOUT   = 12.0
+local BUY_WAIT_TIMEOUT = 30.0
 
 -- ── Maximalen Stueckpreis berechnen ──────────────────────────
 -- Der Spieler darf nur Items kaufen, deren ppu so ist, dass die
@@ -171,6 +173,13 @@ function AHT:OnBuyUpdate(elapsed)
 
     if AHT.buyState == "searching" then
         AHT.buyTimer = AHT.buyTimer + elapsed
+        AHT.buySentTimer = AHT.buySentTimer + elapsed
+        -- Globaler Timeout im searching-Zustand
+        if AHT.buySentTimer >= BUY_WAIT_TIMEOUT then
+            AHT:Print(AHT.L["buy_timeout"])
+            AHT:AdvanceBuyQueue()
+            return
+        end
         if AHT.buyTimer >= BUY_DELAY then
             AHT.buyTimer = 0
             if CanSendAuctionQuery() then
@@ -314,19 +323,15 @@ function AHT:OnBuyAuctionListUpdate()
 
             -- Kaufen!
             AHT.buyLocked = true
+            AHT.buyPendingOffer = {
+                count  = offer.count,
+                name   = item.name,
+                buyout = offer.buyout,
+                ppu    = offer.ppu,
+                idx    = AHT.buyListIdx,
+            }
             PlaceAuctionBid("list", offer.index, offer.buyout)
             boughtThisPage = true
-
-            -- Zaehler aktualisieren
-            item.bought = item.bought + offer.count
-            stillNeeded = stillNeeded - offer.count
-            AHT.buyTotalSpent = AHT.buyTotalSpent + offer.buyout
-            AHT.buyItemsBought = AHT.buyItemsBought + offer.count
-
-            AHT:Print(string.format(AHT.L["buy_purchased"],
-                      offer.count, item.name,
-                      AHT:FormatMoney(offer.buyout),
-                      AHT:FormatMoney(offer.ppu)))
 
             break  -- Nur 1 Kauf pro Update-Zyklus (sicher)
         end
@@ -346,23 +351,41 @@ function AHT:OnBuyAuctionListUpdate()
                 end
                 AHT:AdvanceBuyQueue()
             end
-        else
-            -- Nach dem Kauf: pruefen ob wir genug haben
-            if item.bought >= item.totalNeeded then
-                AHT:Print(string.format(AHT.L["buy_item_complete"], item.name))
-                AHT:AdvanceBuyQueue()
-            else
-                -- Weiter suchen nach kurzer Pause
-                AHT.buyState = "searching"
-                AHT.buyTimer = 0
-            end
         end
+        -- Nach Kauf: Weiter-Logik wird in OnBidPlaced gesteuert
     end
 end
 
 -- ── ERR_AUCTION_BID_PLACED Handler ───────────────────────────
 function AHT:OnBidPlaced()
     AHT.buyLocked = false
+
+    -- Zaehler erst nach Bestaetigung aktualisieren
+    local pending = AHT.buyPendingOffer
+    if pending then
+        local item = AHT.buyList[pending.idx]
+        if item then
+            item.bought = item.bought + pending.count
+        end
+        AHT.buyTotalSpent = AHT.buyTotalSpent + pending.buyout
+        AHT.buyItemsBought = AHT.buyItemsBought + pending.count
+
+        AHT:Print(string.format(AHT.L["buy_purchased"],
+                  pending.count, pending.name,
+                  AHT:FormatMoney(pending.buyout),
+                  AHT:FormatMoney(pending.ppu)))
+
+        AHT.buyPendingOffer = nil
+
+        -- Pruefen ob genug gekauft
+        if item and item.bought >= item.totalNeeded then
+            AHT:Print(string.format(AHT.L["buy_item_complete"], item.name))
+            AHT:AdvanceBuyQueue()
+        else
+            AHT.buyState = "searching"
+            AHT.buyTimer = 0
+        end
+    end
 end
 
 -- ── Kauf abbrechen ───────────────────────────────────────────
@@ -377,10 +400,11 @@ end
 
 -- ── Kauf abgeschlossen ───────────────────────────────────────
 function AHT:OnBuyComplete()
-    AHT.buyState      = "idle"
-    AHT.buyLocked     = false
-    AHT.buyCollecting = false
-    AHT.buyAllOffers  = {}
+    AHT.buyState       = "idle"
+    AHT.buyLocked      = false
+    AHT.buyCollecting  = false
+    AHT.buyAllOffers   = {}
+    AHT.buyPendingOffer = nil
 
     local recipe = AHT.buyRecipe
     if not recipe then return end

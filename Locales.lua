@@ -114,6 +114,10 @@ L["col_profit"]             = "Gewinn"
 L["col_margin"]             = "Marge"
 L["col_updated"]            = "Aktualisiert"
 
+-- Datumsformate
+L["date_short"]             = "%d.%m %H:%M"
+L["date_long"]              = "%d.%m.%Y %H:%M"
+
 -- UI / Buttons
 L["btn_scan"]               = "Scannen"
 L["btn_cancel_scan"]        = "|cffff4444Abbrechen|r"
@@ -168,6 +172,7 @@ L["buydlg_margin_info"]     = "Marge: %s | Gewinn: %s |cffaaaaaa(min. 10%% wird 
 L["buydlg_no_margin"]       = "|cffff4444Keine Margeninformation|r"
 L["buydlg_count_label"]     = "Anzahl Traenke:"
 L["buydlg_est_cost"]        = "|cffaaaaaagesch. Zutatenkosten: %s|r"
+L["buydlg_gold_warning"]    = "|cffff4444Nicht genug Gold! (Verfuegbar: %s)|r"
 L["buydlg_invalid_count"]   = "Bitte eine gueltige Anzahl eingeben!"
 
 -- UI / Post-Dialog
@@ -300,6 +305,10 @@ L["col_profit"]             = "Profit"
 L["col_margin"]             = "Margin"
 L["col_updated"]            = "Updated"
 
+-- Date formats
+L["date_short"]             = "%m/%d %H:%M"
+L["date_long"]              = "%m/%d/%Y %H:%M"
+
 -- UI / Buttons
 L["btn_scan"]               = "Scan"
 L["btn_cancel_scan"]        = "|cffff4444Cancel|r"
@@ -354,6 +363,7 @@ L["buydlg_margin_info"]     = "Margin: %s | Profit: %s |cffaaaaaa(min. 10%% enfo
 L["buydlg_no_margin"]       = "|cffff4444No margin information|r"
 L["buydlg_count_label"]     = "Number of potions:"
 L["buydlg_est_cost"]        = "|cffaaaaaaest. reagent cost: %s|r"
+L["buydlg_gold_warning"]    = "|cffff4444Not enough gold! (Available: %s)|r"
 L["buydlg_invalid_count"]   = "Please enter a valid number!"
 
 -- UI / Post-Dialog

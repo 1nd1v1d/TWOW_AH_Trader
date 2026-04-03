@@ -265,6 +265,25 @@ SavedVariable `TWOW_AHT_DB` speichert:
 
 ## Änderungsprotokoll
 
+### v1.5.0 – 2026-04-03
+**Robustheit, Performance, UX-Verbesserungen:**
+- **AH-Closed-Handler**: Alle laufenden Operationen (Scan, Kauf, Post, Preischeck) werden automatisch abgebrochen wenn das Auktionshaus geschlossen wird
+- **Buyer-Zähler nach Bestätigung**: `bought`-Zähler wird erst nach `ERR_AUCTION_BID_PLACED` erhöht (vorher sofort nach `PlaceAuctionBid`, führte zu falschen Zusammenfassungen)
+- **Fehlgeschlagene Bids**: `UI_ERROR_MESSAGE` Event gibt `buyLocked` sofort frei (vorher 12s Stall bei Fehlern)
+- **Waiting-State-Timeouts**: Scanner und Buyer haben jetzt 30s-Timeouts im `waiting`/`searching`-Zustand (verhindert endloses Polling)
+- **Scanner filtert eigene Auktionen**: `owner ~= UnitName("player")` im Scanner (vorher nur im Buyer), verhindert verfälschte Preisdaten
+- **`listingCounts` persistiert**: Listing-Zahlen werden jetzt in `SavedVariables` gespeichert und nach Reload wiederhergestellt
+- **Rezept-Retry begrenzt**: Max 3 Retry-Versuche für fehlende Reagenzien im Cache (vorher keine Begrenzung)
+- **`GetTradeSkillReagentItemLink` gesichert**: API-Aufruf nur wenn Funktion existiert (Kompatibilität mit Servern ohne diese API)
+- **Preischeck-Timeout**: 10s Timeout für den AH-Preischeck im Post-Dialog (Button wurde bei verlorenen Queries dauerhaft deaktiviert)
+- **OnUpdate optimiert**: Zustandsautomat-Handler werden nur aufgerufen wenn aktiv (vorher jedes Frame ~60x/s)
+- **UI-Zeitstempel optimiert**: `lastScanLabel` wird nur 1x/Sekunde aktualisiert statt jeden Frame
+- **Lokalisierte Datumsformate**: DD.MM für Deutsch, MM/DD für Englisch (Spalte + Tooltip)
+- **Gold-Warnung im Kaufdialog**: Zeigt „Nicht genug Gold!" wenn geschätzte Kosten das verfügbare Gold übersteigen
+- **Toter Code entfernt**: `sortKey`-Feld aus Calculator.lua entfernt (wurde nie ausgelesen)
+- **Undurchsichtige Fenster**: Alle drei Frames (Haupt, Kauf, Post) haben jetzt einen schwarzen undurchsichtigen Hintergrund
+- Version auf 1.5.0 erhöht
+
 ### v1.4.0 – 2026-04-03
 **Auto-Post, Inventar-Check, Preisverlauf, Volumen, Schnäppchen-Scanner:**
 - **Auto-Post (Poster.lua)**: Tränke aus dem Inventar per Shift+Rechtsklick ins AH posten mit automatischer Preisberechnung (Undercut um 1c, Minimum: Kosten × 1,05)

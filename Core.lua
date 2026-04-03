@@ -7,7 +7,7 @@
 TWOW_AHT = {}
 local AHT = TWOW_AHT
 
-AHT.VERSION = "1.4.0"
+AHT.VERSION = "1.5.0"
 
 -- Laufzeit-Daten
 AHT.prices    = {}   -- [itemName] = guenstigster Buyout pro Stueck (Kupfer)
@@ -239,6 +239,7 @@ function AHT:OnLoad()
         AHT.selected     = TWOW_AHT_DB.selected     or {}
         AHT.priceUpdated = TWOW_AHT_DB.priceUpdated or {}
         AHT.priceHistory = TWOW_AHT_DB.priceHistory or {}
+        AHT.listingCounts = TWOW_AHT_DB.listingCounts or {}
     end
     -- Vendor-Preise in die Preistabelle eintragen
     for name, price in pairs(AHT.vendorPrices) do
@@ -254,6 +255,7 @@ function AHT:SaveDB()
     TWOW_AHT_DB.selected     = AHT.selected
     TWOW_AHT_DB.priceUpdated = AHT.priceUpdated
     TWOW_AHT_DB.priceHistory = AHT.priceHistory
+    TWOW_AHT_DB.listingCounts = AHT.listingCounts
 end
 
 -- ── Debug-Ausgabe ────────────────────────────────────────────
@@ -282,9 +284,11 @@ local evtFrame = CreateFrame("Frame", "TWOW_AHT_EventFrame")
 evtFrame:RegisterEvent("VARIABLES_LOADED")
 evtFrame:RegisterEvent("TRADE_SKILL_SHOW")
 evtFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
+evtFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
 evtFrame:RegisterEvent("AUCTION_ITEM_LIST_UPDATE")
 evtFrame:RegisterEvent("CHAT_MSG_SYSTEM")
 evtFrame:RegisterEvent("NEW_AUCTION_UPDATE")
+evtFrame:RegisterEvent("UI_ERROR_MESSAGE")
 
 evtFrame:SetScript("OnEvent", function()
     if event == "VARIABLES_LOADED" then
@@ -293,6 +297,8 @@ evtFrame:SetScript("OnEvent", function()
         AHT:LearnRecipes()
     elseif event == "AUCTION_HOUSE_SHOW" then
         AHT:OnAHShow()
+    elseif event == "AUCTION_HOUSE_CLOSED" then
+        AHT:OnAHClosed()
     elseif event == "AUCTION_ITEM_LIST_UPDATE" then
         if AHT.postPriceCheck and AHT.postPriceCheck.state == "sent" then
             AHT:OnPostPriceCheckResult()
@@ -307,6 +313,11 @@ evtFrame:SetScript("OnEvent", function()
         if arg1 and arg1 == ERR_AUCTION_BID_PLACED then
             AHT:OnBidPlaced()
         end
+    elseif event == "UI_ERROR_MESSAGE" then
+        -- Fehlgeschlagene Bids: buyLocked sofort freigeben
+        if AHT.buyLocked and arg1 then
+            AHT.buyLocked = false
+        end
     elseif event == "NEW_AUCTION_UPDATE" then
         if AHT:IsPosting() then
             AHT:OnNewAuctionUpdate()
@@ -315,29 +326,55 @@ evtFrame:SetScript("OnEvent", function()
 end)
 
 evtFrame:SetScript("OnUpdate", function()
-    if AHT.OnUpdate then
-        AHT:OnUpdate(arg1)
+    local dt = arg1
+    -- Nur aktive Zustandsautomaten aufrufen
+    if AHT.scanState ~= "idle" then
+        AHT:OnUpdate(dt)
     end
-    if AHT.OnBuyUpdate then
-        AHT:OnBuyUpdate(arg1)
+    if AHT.buyState ~= "idle" then
+        AHT:OnBuyUpdate(dt)
     end
-    if AHT.OnPostUpdate then
-        AHT:OnPostUpdate(arg1)
+    if AHT.postState ~= "idle" then
+        AHT:OnPostUpdate(dt)
     end
     -- Price-Check Timer fuer Post-Dialog
     local pc = AHT.postPriceCheck
     if pc and pc.state == "waiting" then
-        pc.timer = pc.timer + arg1
+        pc.timer = pc.timer + dt
         if pc.timer >= 0.3 then
             pc.timer = 0
             if CanSendAuctionQuery() then
                 pc.state = "sent"
+                pc.sentTimer = 0
                 QueryAuctionItems(pc.name, nil, nil, nil, nil, nil, pc.page, nil, nil)
             end
         end
+    elseif pc and pc.state == "sent" then
+        pc.sentTimer = (pc.sentTimer or 0) + dt
+        if pc.sentTimer >= 10.0 then
+            -- Timeout: Preis-Check abbrechen
+            pc.state = "done"
+            AHT:ShowPriceCheckResult()
+        end
     end
     -- Recipe-Retry Timer (bei fehlenden Reagenzien im Cache)
-    if AHT.OnRecipeRetryUpdate then
-        AHT:OnRecipeRetryUpdate(arg1)
+    if AHT._recipeRetryPending then
+        AHT:OnRecipeRetryUpdate(dt)
     end
 end)
+
+-- ── AH geschlossen: alle laufenden Operationen abbrechen ─────
+function AHT:OnAHClosed()
+    if AHT:IsScanning() then
+        AHT:CancelScan()
+    end
+    if AHT:IsBuying() then
+        AHT:CancelBuy()
+    end
+    if AHT:IsPosting() then
+        AHT:CancelPost()
+    end
+    if AHT.postPriceCheck and AHT.postPriceCheck.state ~= "done" then
+        AHT.postPriceCheck = nil
+    end
+end

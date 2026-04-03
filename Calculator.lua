@@ -44,7 +44,7 @@ function AHT:CalculateMargins()
             margin       = nil,
             missingReag  = {},   -- Zutaten ohne AH-Preis
             notOnAH      = false,
-            sortKey      = -999999,            volume       = AHT.listingCounts[recipe.name] or 0,
+            volume       = AHT.listingCounts[recipe.name] or 0,
             avgSellPrice = AHT:GetPriceAverage(recipe.name),
             sellTrend    = AHT:GetPriceTrend(recipe.name),
             isDeal       = AHT:IsDeal(recipe.name),
@@ -136,7 +136,6 @@ function AHT:CalculateMargins()
                 result.margin = 0
             end
 
-            result.sortKey = result.profit
             tinsert(results, result)
         end
     end

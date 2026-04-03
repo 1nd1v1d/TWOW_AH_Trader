@@ -18,6 +18,7 @@ AHT.SCAN_DELAY   = 0.3    -- Sekunden zwischen CanSendAuctionQuery-Checks
 AHT.SENT_TIMEOUT = 15.0   -- Sekunden bis ein ausbleibendes Ergebnis als Timeout gilt
 AHT.scanRetries  = 0      -- Anzahl Retries fuer aktuelles Item
 AHT.MAX_RETRIES  = 2      -- Max Retries pro Item bevor uebersprungen
+AHT.WAIT_TIMEOUT = 30.0   -- Max Sekunden im "waiting"-Zustand
 
 -- Scan-Queue
 AHT.scanQueue    = {}     -- Liste der Item-Namen die gescannt werden sollen
@@ -193,6 +194,13 @@ end
 function AHT:OnUpdate(elapsed)
     if AHT.scanState == "waiting" then
         AHT.scanTimer = AHT.scanTimer + elapsed
+        AHT.sentTimer = AHT.sentTimer + elapsed
+        -- Globaler Timeout im waiting-Zustand (AH geschlossen etc.)
+        if AHT.sentTimer >= AHT.WAIT_TIMEOUT then
+            AHT:Print(string.format(AHT.L["scan_timeout"], (AHT.currentItem or "?")))
+            AHT:AdvanceScanQueue()
+            return
+        end
         if AHT.scanTimer >= AHT.SCAN_DELAY then
             AHT.scanTimer = 0
             -- Nur senden wenn AH bereit ist
@@ -227,6 +235,7 @@ function AHT:OnAuctionListUpdate()
     AHT.sentTimer = 0
 
     local numItems = GetNumAuctionItems("list")
+    local playerName = UnitName("player")
 
     for i = 1, numItems do
         local name, texture, count, quality, canUse, level,
@@ -234,9 +243,11 @@ function AHT:OnAuctionListUpdate()
               bidAmount, highBidder, owner = GetAuctionItemInfo("list", i)
 
         -- Nur exakte Namens-Treffer mit gueltigem Buyout beruecksichtigen
+        -- Eigene Auktionen ignorieren (verfaelschen Preisdaten)
         if name == AHT.currentItem
            and buyoutPrice and buyoutPrice > 0
-           and count and count > 0 then
+           and count and count > 0
+           and owner ~= playerName then
             local ppu = math.floor(buyoutPrice / count)
             if not AHT.scanMinPrices[name] or ppu < AHT.scanMinPrices[name] then
                 AHT.scanMinPrices[name] = ppu

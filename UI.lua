@@ -43,6 +43,7 @@ mainFrame:SetBackdrop({
     tile     = true, tileSize = 32, edgeSize = 32,
     insets   = { left = 11, right = 12, top = 12, bottom = 11 },
 })
+mainFrame:SetBackdropColor(0, 0, 0, 1)
 mainFrame:EnableMouse(true)
 mainFrame:SetMovable(true)
 mainFrame:RegisterForDrag("LeftButton")
@@ -331,7 +332,7 @@ local function CreateDataRow(rowIndex)
         end
         if r.updatedAt then
             GameTooltip:AddDoubleLine(AHT.L["tt_updated"],
-                date("%d.%m.%Y %H:%M", r.updatedAt), 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+                date(AHT.L["date_long"], r.updatedAt), 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
         end
 
         -- Inventar-Info
@@ -479,8 +480,12 @@ lastScanLabel:SetJustifyH("RIGHT")
 lastScanLabel:SetText("")
 AHT.lastScanLabel = lastScanLabel
 
--- Periodisches Update des Zeitstempels
+-- Periodisches Update des Zeitstempels (1x pro Sekunde)
+local lastScanUpdateAcc = 0
 mainFrame:SetScript("OnUpdate", function()
+    lastScanUpdateAcc = lastScanUpdateAcc + arg1
+    if lastScanUpdateAcc < 1.0 then return end
+    lastScanUpdateAcc = 0
     if AHT.lastScanTime then
         local elapsed = math.floor(GetTime() - AHT.lastScanTime)
         local mins    = math.floor(elapsed / 60)
@@ -691,7 +696,7 @@ function AHT:RefreshUI()
 
             -- Aktualisiert (Datum + Uhrzeit)
             if r.updatedAt then
-                cells["updated"]:SetText("|cffaaaaaa" .. date("%d.%m %H:%M", r.updatedAt) .. "|r")
+                cells["updated"]:SetText("|cffaaaaaa" .. date(AHT.L["date_short"], r.updatedAt) .. "|r")
             else
                 cells["updated"]:SetText("|cffaaaaaa-|r")
             end
@@ -728,6 +733,7 @@ buyFrame:SetBackdrop({
     tile     = true, tileSize = 32, edgeSize = 32,
     insets   = { left = 11, right = 12, top = 12, bottom = 11 },
 })
+buyFrame:SetBackdropColor(0, 0, 0, 1)
 buyFrame:EnableMouse(true)
 buyFrame:SetMovable(true)
 buyFrame:RegisterForDrag("LeftButton")
@@ -799,7 +805,11 @@ buyCountBox:SetScript("OnTextChanged", function()
     if count > 0 and buyFrame._recipe then
         local r = buyFrame._recipe
         local totalCost = r.ingredCost * count
-        buyEstLabel:SetText(string.format(AHT.L["buydlg_est_cost"], AHT:FormatMoney(totalCost)))
+        local costText = string.format(AHT.L["buydlg_est_cost"], AHT:FormatMoney(totalCost))
+        if totalCost > GetMoney() then
+            costText = costText .. "\n" .. string.format(AHT.L["buydlg_gold_warning"], AHT:FormatMoney(GetMoney()))
+        end
+        buyEstLabel:SetText(costText)
     else
         buyEstLabel:SetText("")
     end
@@ -881,6 +891,7 @@ postFrame:SetBackdrop({
     tile     = true, tileSize = 32, edgeSize = 32,
     insets   = { left = 11, right = 12, top = 12, bottom = 11 },
 })
+postFrame:SetBackdropColor(0, 0, 0, 1)
 postFrame:EnableMouse(true)
 postFrame:SetMovable(true)
 postFrame:RegisterForDrag("LeftButton")
