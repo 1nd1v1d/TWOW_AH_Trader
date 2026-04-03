@@ -1126,7 +1126,12 @@ function AHT:ShowPriceCheckResult()
         if diff > 0 then
             postDiffLabel:SetText(string.format(L["postdlg_diff_cheaper"], AHT:FormatMoney(diff)))
         elseif diff < 0 then
-            postDiffLabel:SetText(string.format(L["postdlg_diff_more"], AHT:FormatMoney(-diff)))
+            -- Preis ist teurer als AH -> aktualisieren und unterbieten
+            AHT.prices[pc.name] = pc.minPPU
+            local newPrice = AHT:CalcPostPrice(postFrame._recipe)
+            postPriceLabel:SetText(string.format(L["postdlg_price_info"], AHT:FormatMoney(newPrice)))
+            local newDiff = pc.minPPU - newPrice
+            postDiffLabel:SetText(string.format(L["postdlg_diff_cheaper"], AHT:FormatMoney(newDiff)))
         else
             postDiffLabel:SetText(L["postdlg_diff_same"])
         end
