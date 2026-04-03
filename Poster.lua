@@ -74,8 +74,9 @@ function AHT:BuildPostPlan(totalCount, stackSize)
 end
 
 -- Findet den ersten Stack eines Items in den Taschen
+-- minCount (optional): nur Stacks mit mindestens dieser Anzahl zurueckgeben
 -- Gibt bag, slot, count zurueck (oder nil wenn nicht gefunden)
-function AHT:FindFirstBagStack(itemName)
+function AHT:FindFirstBagStack(itemName, minCount)
     for bag = 0, 4 do
         local slots = GetContainerNumSlots(bag)
         for slot = 1, slots do
@@ -84,7 +85,10 @@ function AHT:FindFirstBagStack(itemName)
                 local _, _, iName = strfind(link, "%[(.-)%]")
                 if iName == itemName then
                     local _, count = GetContainerItemInfo(bag, slot)
-                    return bag, slot, (count or 1)
+                    count = count or 1
+                    if not minCount or count >= minCount then
+                        return bag, slot, count
+                    end
                 end
             end
         end
@@ -225,10 +229,18 @@ function AHT:OnPostUpdate(elapsed)
             return
         end
 
-        -- Suche einen Stack der groesser ist und gesplittet werden kann
-        local bag, slot, currentCount = AHT:FindFirstBagStack(AHT.postRecipeName)
+        -- Suche einen Stack mit mindestens wantCount Items zum Splitten
+        local bag, slot, currentCount = AHT:FindFirstBagStack(AHT.postRecipeName, wantCount)
         if not bag then
-            AHT:AdvancePostQueue()
+            -- Kein Stack gross genug -> kleineren Stack direkt posten
+            bag, slot, currentCount = AHT:FindFirstBagStack(AHT.postRecipeName)
+            if not bag then
+                AHT:AdvancePostQueue()
+                return
+            end
+            AHT.postReadySlot = { bag, slot }
+            AHT.postState = "placing"
+            AHT.postTimer = 0
             return
         end
 
