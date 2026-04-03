@@ -966,7 +966,7 @@ local function UpdatePostResultLabel()
         return
     end
     local maxAuctions = math.ceil(total / sz)
-    local countText = strtrim(postCountBox:GetText() or "")
+    local countText = string.gsub(postCountBox:GetText() or "", "^%s*(.-)%s*$", "%1")
     local wantedStacks = tonumber(countText)
     local auctions = maxAuctions
     if wantedStacks and wantedStacks > 0 and wantedStacks < maxAuctions then
@@ -1030,7 +1030,7 @@ postConfirmBtn:SetScript("OnClick", function()
         return
     end
     if not postFrame._recipe then return end
-    local countText = strtrim(postCountBox:GetText() or "")
+    local countText = string.gsub(postCountBox:GetText() or "", "^%s*(.-)%s*$", "%1")
     local maxStacks = tonumber(countText) or 0
     if maxStacks <= 0 then maxStacks = nil end
     postFrame:Hide()
