@@ -281,7 +281,7 @@ SavedVariable `TWOW_AHT_DB` speichert:
 - **Lokalisierte Datumsformate**: DD.MM für Deutsch, MM/DD für Englisch (Spalte + Tooltip)
 - **Gold-Warnung im Kaufdialog**: Zeigt „Nicht genug Gold!" wenn geschätzte Kosten das verfügbare Gold übersteigen
 - **Toter Code entfernt**: `sortKey`-Feld aus Calculator.lua entfernt (wurde nie ausgelesen)
-- **Undurchsichtige Fenster**: Alle drei Frames (Haupt, Kauf, Post) haben jetzt einen schwarzen undurchsichtigen Hintergrund
+- **Undurchsichtige Fenster**: Alle drei Frames (Haupt, Kauf, Post) nutzen `ChatFrameBackground`-Texture mit solid-schwarzem Hintergrund (0.07 Grau) statt halbtransparentem `UI-DialogBox-Background`
 - Version auf 1.5.0 erhöht
 
 ### v1.4.0 – 2026-04-03
