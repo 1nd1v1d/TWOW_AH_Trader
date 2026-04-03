@@ -96,6 +96,15 @@ local function InitLocaleLabels()
         local key = colLabelMap[col.id]
         if key then col.label = L[key] end
     end
+    -- Update already-created header FontStrings
+    for id, fs in pairs(headerLabels) do
+        local key = colLabelMap[id]
+        if key then fs:SetText("|cffffff00" .. L[key] .. "|r") end
+    end
+    for id, btn in pairs(headerBtns) do
+        local key = colLabelMap[id]
+        if key then btn._fs:SetText("|cffffff00" .. L[key] .. "|r") end
+    end
 end
 
 local closeBtn = CreateFrame("Button", nil, mainFrame, "UIPanelCloseButton")
@@ -137,6 +146,7 @@ end)
 
 -- ── Spalten-Header (sortierbar fuer Gewinn/Marge) ───────────────
 local headerBtns = {}
+local headerLabels = {}  -- Alle Header-FontStrings fuer Locale-Update
 for _, col in ipairs(COLS) do
     if col.id ~= "sel" then
         if col.sortable then
@@ -149,7 +159,6 @@ for _, col in ipairs(COLS) do
             fs:SetJustifyH("RIGHT")
             fs:SetText("|cffffff00" .. col.label .. "|r")
             btn._colId = col.id
-            btn._label = col.label
             btn._fs    = fs
             btn:SetScript("OnClick", function()
                 if AHT.sortMode == this._colId then
@@ -179,6 +188,7 @@ for _, col in ipairs(COLS) do
             fs:SetWidth(col.w)
             fs:SetJustifyH(col.id == "name" and "LEFT" or "RIGHT")
             fs:SetText("|cffffff00" .. col.label .. "|r")
+            headerLabels[col.id] = fs
         end
     end
 end
@@ -498,11 +508,15 @@ function AHT:RefreshUI()
 
     -- Sortier-Indikatoren in den Headers updaten
     for id, btn in pairs(AHT.headerBtns or {}) do
+        local label = ""
+        for _, col in ipairs(COLS) do
+            if col.id == id then label = col.label; break end
+        end
         local arrow = ""
         if AHT.sortMode == id then
             if AHT.sortDir == "desc" then arrow = " v" else arrow = " ^" end
         end
-        btn._fs:SetText("|cffffff00" .. btn._label .. arrow .. "|r")
+        btn._fs:SetText("|cffffff00" .. label .. arrow .. "|r")
     end
 
     -- Scan-Button Text updaten

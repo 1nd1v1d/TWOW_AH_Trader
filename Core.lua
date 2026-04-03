@@ -336,4 +336,8 @@ evtFrame:SetScript("OnUpdate", function()
             end
         end
     end
+    -- Recipe-Retry Timer (bei fehlenden Reagenzien im Cache)
+    if AHT.OnRecipeRetryUpdate then
+        AHT:OnRecipeRetryUpdate(arg1)
+    end
 end)

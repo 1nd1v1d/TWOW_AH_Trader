@@ -33,6 +33,7 @@ function AHT:LearnRecipes()
     end
 
     local newRecipes = {}
+    local needsRetry = false
 
     for i = 1, totalSkills do
         local skillName, skillType, numAvailable, isExpanded = GetTradeSkillInfo(i)
@@ -41,14 +42,25 @@ function AHT:LearnRecipes()
         if skillType ~= "header" and skillName then
             local numReagents = GetTradeSkillNumReagents(i)
             local reagents = {}
+            local hasMissing = false
 
             for r = 1, numReagents do
                 local rName, rTexture, rCount, rPlayerCount = GetTradeSkillReagentInfo(i, r)
-                if rName then
+                if not rName or rName == "" then
+                    -- Item nicht im Cache: versuche Name aus ItemLink zu extrahieren
+                    local link = GetTradeSkillReagentItemLink(i, r)
+                    if link then
+                        local _, _, linkName = strfind(link, "%[(.-)%]")
+                        if linkName then rName = linkName end
+                    end
+                end
+                if rName and rName ~= "" then
                     tinsert(reagents, {
                         name  = rName,
                         count = rCount or 1,
                     })
+                else
+                    hasMissing = true
                 end
             end
 
@@ -62,11 +74,16 @@ function AHT:LearnRecipes()
             end
 
             if not isDuplicate and getn(reagents) > 0 then
-                tinsert(newRecipes, {
-                    name     = skillName,
-                    link     = nil,
-                    reagents = reagents,
-                })
+                -- Nur speichern wenn alle Reagenzien erkannt wurden
+                if hasMissing then
+                    needsRetry = true
+                else
+                    tinsert(newRecipes, {
+                        name     = skillName,
+                        link     = nil,
+                        reagents = reagents,
+                    })
+                end
             end
         end
     end
@@ -82,5 +99,22 @@ function AHT:LearnRecipes()
         if TWOW_AHT_UI and TWOW_AHT_UI:IsVisible() then
             AHT:RefreshUI()
         end
+    end
+
+    -- Bei fehlenden Reagenzien: verzoegerter Retry (Item-Cache nachladen)
+    if needsRetry and not AHT._recipeRetryPending then
+        AHT._recipeRetryPending = true
+        AHT._recipeRetryTimer = 0
+    end
+end
+
+-- Verzoegerter Retry fuer Items die beim ersten Laden nicht im Cache waren
+function AHT:OnRecipeRetryUpdate(elapsed)
+    if not AHT._recipeRetryPending then return end
+    AHT._recipeRetryTimer = (AHT._recipeRetryTimer or 0) + elapsed
+    if AHT._recipeRetryTimer >= 1.0 then
+        AHT._recipeRetryPending = false
+        AHT._recipeRetryTimer = 0
+        AHT:LearnRecipes()
     end
 end
