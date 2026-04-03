@@ -286,6 +286,8 @@ SavedVariable `TWOW_AHT_DB` speichert:
 - **Preis prüfen**: Button im Post-Dialog scannt aktuellen AH-Preis und zeigt Differenz zum berechneten Post-Preis. Bei günstigerem AH-Preis wird der Post-Preis automatisch auf neuen Undercut korrigiert
 - **Stack-Splitting**: `SplitContainerItem` für beliebige Stackgrößen beim Posten (Bag-to-Bag nach aux-addon-Muster)
 - **Bugfix**: Poster-Confirming nutzt jetzt Polling statt Event-basiert (verhindert verpasste `NEW_AUCTION_UPDATE` Events)
+- **Bugfix**: Spaltenüberschriften in englischer Lokalisierung fehlten (FontStrings wurden vor Locale-Init erstellt, jetzt verzögertes Update)
+- **Bugfix**: Reagenzien-Erkennung verbessert – Fallback auf `GetTradeSkillReagentItemLink` wenn `GetTradeSkillReagentInfo` keinen Namen liefert (Item-Cache), automatischer Retry nach 1 Sekunde
 
 ### v1.3.0 – 2026-04-03
 **Suchfeld, Sortierung, Aktualisierungszeitpunkt, Datenanzeige:**
