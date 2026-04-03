@@ -22,10 +22,8 @@ AHT.postStacks      = {}        -- { count1, count2, ... } Posting-Plan (Stueckz
 AHT.postStackIdx    = 0         -- Aktueller Plan-Index
 AHT.postPrice       = 0         -- Buyout-Preis pro Stueck (Kupfer)
 AHT.postTimer       = 0
-AHT.postTotalPosted = 0         -- Stueck insgesamt gepostet
 AHT.postTotalStacks = 0         -- Stacks insgesamt gepostet
 AHT.postDuration    = 1440      -- Auktionsdauer in Minuten (24h)
-AHT.postAwaitConfirm = false    -- Wartet auf ERR_AUCTION_STARTED
 AHT.postStackSize   = 1         -- Gewuenschte Stackgroesse
 AHT.postSplitTarget = nil       -- {bag, slot} des Ziel-Slots fuer Split
 AHT.postSplitExpect = 0         -- Erwartete Stackgroesse nach Split
@@ -169,7 +167,6 @@ function AHT:StartPost(recipeName, recipe, stackSize, maxStacks)
     AHT.postTotalPosted = 0
     AHT.postTotalStacks = 0
     AHT.postTimer       = 0
-    AHT.postAwaitConfirm = false
 
     AHT:Print(string.format(L["post_header"], totalCount, recipeName, getn(plan)))
     AHT:Print(string.format(L["post_price"], AHT:FormatMoney(price)))
@@ -196,7 +193,6 @@ function AHT:AdvancePostQueue()
     AHT.postSplitExpect = 0
     AHT.postState       = "splitting"
     AHT.postTimer       = 0
-    AHT.postAwaitConfirm = false
 end
 
 -- ── OnUpdate fuer Post-Zustandsautomat ────────────────────────
@@ -304,31 +300,33 @@ function AHT:OnPostUpdate(elapsed)
         ClickAuctionSellItemButton()
         ClearCursor()
 
-        -- Warten auf NEW_AUCTION_UPDATE
+        -- Warten bis Item im Sell-Slot erkannt wird (Polling)
         AHT.postState = "confirming"
-        AHT.postAwaitConfirm = true
         AHT.postTimer = 0
 
     elseif AHT.postState == "confirming" then
         AHT.postTimer = AHT.postTimer + elapsed
+        if AHT.postTimer < 0.2 then return end  -- kurze Wartezeit fuer Sell-Slot Update
 
-        -- Timeout nach 3 Sekunden falls NEW_AUCTION_UPDATE nicht kommt
+        -- Pollen ob Item im Sell-Slot ist
+        local name = GetAuctionSellItemInfo()
+        if name and name == AHT.postRecipeName then
+            AHT:DoStartAuction()
+            return
+        end
+
+        -- Timeout nach 3 Sekunden
         if AHT.postTimer >= 3.0 then
-            if AHT.postAwaitConfirm then
-                -- Versuche trotzdem zu posten (Item koennte schon im Slot sein)
-                AHT:DoStartAuction()
-            end
+            AHT:Print(string.format(AHT.L["post_wrong_item"], (name or "?")))
+            ClearCursor()
+            AHT:AdvancePostQueue()
         end
     end
 end
 
--- ── NEW_AUCTION_UPDATE: Item ist im Sell-Slot ─────────────────
+-- ── NEW_AUCTION_UPDATE: nicht mehr fuer Confirm benoetigt ─────
 function AHT:OnNewAuctionUpdate()
-    if AHT.postState ~= "confirming" then return end
-    if not AHT.postAwaitConfirm then return end
-
-    AHT.postAwaitConfirm = false
-    AHT:DoStartAuction()
+    -- Platzhalter, Confirm nutzt jetzt Polling
 end
 
 -- ── Auktion starten ──────────────────────────────────────────
