@@ -38,12 +38,12 @@ mainFrame:SetWidth(FRAME_W)
 mainFrame:SetHeight(FRAME_H)
 mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
 mainFrame:SetBackdrop({
-    bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
     tile     = true, tileSize = 32, edgeSize = 32,
     insets   = { left = 11, right = 12, top = 12, bottom = 11 },
 })
-mainFrame:SetBackdropColor(0, 0, 0, 1)
+mainFrame:SetBackdropColor(0.07, 0.07, 0.07, 1)
 mainFrame:EnableMouse(true)
 mainFrame:SetMovable(true)
 mainFrame:RegisterForDrag("LeftButton")
@@ -728,12 +728,12 @@ buyFrame:SetWidth(340)
 buyFrame:SetHeight(240)
 buyFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
 buyFrame:SetBackdrop({
-    bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
     tile     = true, tileSize = 32, edgeSize = 32,
     insets   = { left = 11, right = 12, top = 12, bottom = 11 },
 })
-buyFrame:SetBackdropColor(0, 0, 0, 1)
+buyFrame:SetBackdropColor(0.07, 0.07, 0.07, 1)
 buyFrame:EnableMouse(true)
 buyFrame:SetMovable(true)
 buyFrame:RegisterForDrag("LeftButton")
@@ -886,12 +886,12 @@ postFrame:SetWidth(300)
 postFrame:SetHeight(270)
 postFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
 postFrame:SetBackdrop({
-    bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
     tile     = true, tileSize = 32, edgeSize = 32,
     insets   = { left = 11, right = 12, top = 12, bottom = 11 },
 })
-postFrame:SetBackdropColor(0, 0, 0, 1)
+postFrame:SetBackdropColor(0.07, 0.07, 0.07, 1)
 postFrame:EnableMouse(true)
 postFrame:SetMovable(true)
 postFrame:RegisterForDrag("LeftButton")
