@@ -1,0 +1,15 @@
+## Interface: 11200
+## Title: TWOW AH Trader
+## Notes: Scannt AH-Preise fuer Traenke/Elixiere und berechnet Herstellungsmargen
+## Author: TWOW_AHT
+## Version: 1.4.0
+## SavedVariables: TWOW_AHT_DB
+
+Core.lua
+Locales.lua
+Recipes.lua
+Scanner.lua
+Calculator.lua
+Buyer.lua
+Poster.lua
+UI.lua
