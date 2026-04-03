@@ -57,20 +57,37 @@ function AHT:CalcPostPrice(recipe)
 end
 
 -- ── Posting-Plan erstellen ────────────────────────────────────
--- Erstellt aus den Bag-Stacks einen Plan mit gewuenschter Stackgroesse
--- Gibt zurueck: { {bag, slot, count}, ... } wobei count <= stackSize
-function AHT:BuildPostPlan(stacks, stackSize)
+-- Erstellt eine Liste von Stueckzahlen pro Auktion
+-- Gibt zurueck: { count1, count2, ... } wobei jeder Eintrag <= stackSize
+function AHT:BuildPostPlan(totalCount, stackSize)
     local plan = {}
-    for _, s in ipairs(stacks) do
-        local remaining = s.count
-        while remaining > 0 do
-            local take = remaining
-            if take > stackSize then take = stackSize end
-            tinsert(plan, { bag = s.bag, slot = s.slot, count = take })
-            remaining = remaining - take
-        end
+    local remaining = totalCount
+    while remaining > 0 do
+        local take = remaining
+        if take > stackSize then take = stackSize end
+        tinsert(plan, take)
+        remaining = remaining - take
     end
     return plan
+end
+
+-- Findet den ersten Stack eines Items in den Taschen
+-- Gibt bag, slot, count zurueck (oder nil wenn nicht gefunden)
+function AHT:FindFirstBagStack(itemName)
+    for bag = 0, 4 do
+        local slots = GetContainerNumSlots(bag)
+        for slot = 1, slots do
+            local link = GetContainerItemLink(bag, slot)
+            if link then
+                local _, _, iName = strfind(link, "%[(.-)%]")
+                if iName == itemName then
+                    local _, count = GetContainerItemInfo(bag, slot)
+                    return bag, slot, (count or 1)
+                end
+            end
+        end
+    end
+    return nil, nil, 0
 end
 
 -- ── Posting starten ──────────────────────────────────────────
@@ -85,15 +102,15 @@ function AHT:StartPost(recipeName, recipe, stackSize, maxStacks)
         return
     end
 
-    -- Stacks in den Taschen finden
-    local stacks = AHT:FindItemInBags(recipeName)
-    if getn(stacks) == 0 then
+    -- Gesamtanzahl in den Taschen ermitteln
+    local totalCount = AHT:CountItemInBags(recipeName)
+    if totalCount == 0 then
         AHT:Print(string.format(L["post_none_found"], recipeName))
         return
     end
 
-    -- Posting-Plan mit gewuenschter Stackgroesse erstellen
-    local plan = AHT:BuildPostPlan(stacks, stackSize or 1)
+    -- Posting-Plan erstellen (nur Stueckzahlen)
+    local plan = AHT:BuildPostPlan(totalCount, stackSize or 1)
 
     -- Auf gewuenschte Stackanzahl begrenzen
     if maxStacks and maxStacks > 0 and getn(plan) > maxStacks then
@@ -116,12 +133,6 @@ function AHT:StartPost(recipeName, recipe, stackSize, maxStacks)
     AHT.postTotalStacks = 0
     AHT.postTimer       = 0
     AHT.postAwaitConfirm = false
-
-    -- Zusammenfassung
-    local totalCount = 0
-    for _, s in ipairs(stacks) do
-        totalCount = totalCount + s.count
-    end
 
     AHT:Print(string.format(L["post_header"], totalCount, recipeName, getn(plan)))
     AHT:Print(string.format(L["post_price"], AHT:FormatMoney(price)))
@@ -157,20 +168,36 @@ function AHT:OnPostUpdate(elapsed)
         if AHT.postTimer >= POST_DELAY then
             AHT.postTimer = 0
 
-            local stack = AHT.postStacks[AHT.postStackIdx]
-            if not stack then
+            local wantCount = AHT.postStacks[AHT.postStackIdx]
+            if not wantCount then
                 AHT:AdvancePostQueue()
                 return
             end
 
-            -- Item in die Hand nehmen und in den AH-Sell-Slot legen
-            ClearCursor()
-            local _, currentCount = GetContainerItemInfo(stack.bag, stack.slot)
-            if stack.count < (currentCount or 0) then
-                SplitContainerItem(stack.bag, stack.slot, stack.count)
-            else
-                PickupContainerItem(stack.bag, stack.slot)
+            -- Item live in den Taschen suchen
+            local bag, slot, currentCount = AHT:FindFirstBagStack(AHT.postRecipeName)
+            if not bag then
+                AHT:AdvancePostQueue()
+                return
             end
+
+            -- Item aufnehmen (Split falls noetig)
+            ClearCursor()
+            if wantCount < currentCount then
+                SplitContainerItem(bag, slot, wantCount)
+            else
+                PickupContainerItem(bag, slot)
+            end
+
+            -- Kurz warten bevor ClickAuctionSellItemButton (Split braucht 1 Frame)
+            AHT.postState = "clicking"
+            AHT.postTimer = 0
+        end
+
+    elseif AHT.postState == "clicking" then
+        AHT.postTimer = AHT.postTimer + elapsed
+        if AHT.postTimer >= 0.1 then
+            AHT.postTimer = 0
             ClickAuctionSellItemButton()
 
             -- Warten auf NEW_AUCTION_UPDATE
@@ -203,8 +230,8 @@ end
 
 -- ── Auktion starten ──────────────────────────────────────────
 function AHT:DoStartAuction()
-    local stack = AHT.postStacks[AHT.postStackIdx]
-    if not stack then
+    local wantCount = AHT.postStacks[AHT.postStackIdx]
+    if not wantCount then
         AHT:AdvancePostQueue()
         return
     end
@@ -213,6 +240,7 @@ function AHT:DoStartAuction()
     local name, texture, count, quality, canUse = GetAuctionSellItemInfo()
     if not name or name ~= AHT.postRecipeName then
         AHT:Print(string.format(AHT.L["post_wrong_item"], (name or "?")))
+        ClearCursor()
         AHT:AdvancePostQueue()
         return
     end
