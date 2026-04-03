@@ -97,13 +97,17 @@ local function InitLocaleLabels()
         if key then col.label = L[key] end
     end
     -- Update already-created header FontStrings
-    for id, fs in pairs(headerLabels) do
-        local key = colLabelMap[id]
-        if key then fs:SetText("|cffffff00" .. L[key] .. "|r") end
+    if headerLabels then
+        for id, fs in pairs(headerLabels) do
+            local key = colLabelMap[id]
+            if key then fs:SetText("|cffffff00" .. L[key] .. "|r") end
+        end
     end
-    for id, btn in pairs(headerBtns) do
-        local key = colLabelMap[id]
-        if key then btn._fs:SetText("|cffffff00" .. L[key] .. "|r") end
+    if headerBtns then
+        for id, btn in pairs(headerBtns) do
+            local key = colLabelMap[id]
+            if key then btn._fs:SetText("|cffffff00" .. L[key] .. "|r") end
+        end
     end
 end
 
