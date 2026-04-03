@@ -28,7 +28,8 @@ AHT.postDuration    = 1440      -- Auktionsdauer in Minuten (24h)
 AHT.postAwaitConfirm = false    -- Wartet auf NEW_AUCTION_UPDATE
 AHT.postStackSize   = 1         -- Gewuenschte Stackgroesse
 
-local POST_DELAY    = 0.5       -- Sekunden zwischen Posts
+local POST_DELAY    = 1.0       -- Sekunden zwischen Posts
+local CLICK_DELAY   = 0.3       -- Sekunden nach SplitContainerItem bevor Click
 
 -- ── Optimalen Preis berechnen ─────────────────────────────────
 -- Undercut: 1c unter dem guenstigsten AH-Preis pro Stueck
@@ -196,14 +197,20 @@ function AHT:OnPostUpdate(elapsed)
 
     elseif AHT.postState == "clicking" then
         AHT.postTimer = AHT.postTimer + elapsed
-        if AHT.postTimer >= 0.1 then
+        if AHT.postTimer >= CLICK_DELAY then
             AHT.postTimer = 0
-            ClickAuctionSellItemButton()
-
-            -- Warten auf NEW_AUCTION_UPDATE
-            AHT.postState = "confirming"
-            AHT.postAwaitConfirm = true
-            AHT.postTimer = 0
+            -- Pruefen ob Cursor ein Item haelt
+            if CursorHasItem() then
+                ClickAuctionSellItemButton()
+                -- Warten auf NEW_AUCTION_UPDATE
+                AHT.postState = "confirming"
+                AHT.postAwaitConfirm = true
+                AHT.postTimer = 0
+            else
+                -- Split fehlgeschlagen, erneut versuchen
+                AHT.postState = "placing"
+                AHT.postTimer = 0
+            end
         end
 
     elseif AHT.postState == "confirming" then
