@@ -173,11 +173,13 @@ idle → searching → buying → (nächstes Item oder nächste Seite)
 ## Poster-Zustandsautomat
 
 ```
-idle → placing → confirming → (nächster Stack) → idle (fertig)
+idle → splitting → split_wait → placing → confirming → (nächster Stack) → idle (fertig)
 ```
 
 - **idle**: Kein Postvorgang aktiv
-- **placing**: Item aus Tasche aufnehmen + in den AH-Sell-Slot legen (bei Teilstacks via `SplitContainerItem`)
+- **splitting**: Sucht einen passenden Stack in den Taschen. Wenn ein Stack mit exakt der gewünschten Größe existiert, wird er direkt verwendet. Andernfalls wird via `SplitContainerItem(bag, slot, count)` in einen leeren Taschenslot aufgeteilt (Bag-to-Bag-Split nach aux-addon-Muster)
+- **split_wait**: Pollt den Ziel-Slot (0,1 s Intervall) bis die korrekte Itemanzahl vorhanden ist (max 3 s Timeout). Erst wenn der Split abgeschlossen ist, wird fortgefahren
+- **placing**: Platziert das Item im AH-Sell-Slot nach dem aux-addon-Muster: `ClearCursor → ClickAuctionSellItemButton → ClearCursor → PickupContainerItem(bag, slot) → ClickAuctionSellItemButton → ClearCursor`
 - **confirming**: Wartet auf `NEW_AUCTION_UPDATE` (max 3 s Timeout), dann `StartAuction()` aufrufen
 - Pro Stack wird ein separater Auktionseintrag erstellt
 - Preisberechnung: Aktueller AH-Preis − 1c Undercut, mindestens Zutatenkosten × 1,05, Fallback ohne AH-Preis: Kosten × 1,20
@@ -198,7 +200,7 @@ Beim Shift+Rechtsklick auf einen Trank öffnet sich ein Dialog mit:
   - Gelb: „Gleicher Preis"
   - Rot: „X teurer als AH"
 
-Die Stacks werden via `SplitContainerItem` aufgeteilt – ein 20er-Stack wird z.B. in 4×5er Auktionen gepostet.
+Die Stacks werden via Bag-to-Bag-Split aufgeteilt (nach aux-addon-Muster): `SplitContainerItem` teilt in einen leeren Taschenslot, der Ziel-Slot wird gepollt bis die korrekte Menge vorhanden ist, dann wird der fertige Stack ins AH platziert. Ein 20er-Stack wird z.B. in 4×5er Auktionen gepostet.
 
 ## Schnäppchen-Scanner (Sniper)
 
@@ -276,7 +278,7 @@ SavedVariable `TWOW_AHT_DB` speichert:
 - Slash-Befehle: `/aht snipe` und `/aht post` hinzugefügt
 - `priceHistory` und `listingCounts` werden persistent gespeichert
 - `NEW_AUCTION_UPDATE` Event für Poster-Modul registriert
-- Poster-Zustandsautomat: `idle → placing → confirming → idle`
+- Poster-Zustandsautomat: `idle → splitting → split_wait → placing → confirming → idle` (aux-addon Bag-to-Bag-Split-Muster)
 - **Zweiphasen-Kauf**: Buyer scannt erst alle AH-Seiten nach günstigstem Stückpreis, kauft dann gezielt (verhindert überteuerte Einzelstücke vor günstigen Stacks)
 - **Lokalisierung (Locales.lua)**: Automatische Spracherkennung via `GetLocale()`, Deutsch (deDE) + Englisch (alle anderen)
 - Alle UI-Strings über `AHT.L["key"]` statt hardcoded
