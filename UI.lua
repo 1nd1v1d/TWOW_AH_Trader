@@ -98,14 +98,14 @@ local function InitLocaleLabels()
         if key then col.label = L[key] end
     end
     -- Update already-created header FontStrings
-    if headerLabels then
-        for id, fs in pairs(headerLabels) do
+    if AHT.headerLabels then
+        for id, fs in pairs(AHT.headerLabels) do
             local key = colLabelMap[id]
             if key then fs:SetText("|cffffff00" .. L[key] .. "|r") end
         end
     end
-    if headerBtns then
-        for id, btn in pairs(headerBtns) do
+    if AHT.headerBtns then
+        for id, btn in pairs(AHT.headerBtns) do
             local key = colLabelMap[id]
             if key then btn._fs:SetText("|cffffff00" .. L[key] .. "|r") end
         end
@@ -197,7 +197,8 @@ for _, col in ipairs(COLS) do
         end
     end
 end
-AHT.headerBtns = headerBtns
+AHT.headerBtns   = headerBtns
+AHT.headerLabels = headerLabels
 
 -- Trennlinie unter dem Header
 local sepLine = mainFrame:CreateTexture(nil, "ARTWORK")
