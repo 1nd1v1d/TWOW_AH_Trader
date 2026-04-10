@@ -18,6 +18,32 @@ AHT.priceUpdated = {}  -- [itemName] = Unix-Timestamp der letzten Preisermittlun
 AHT.priceHistory = {}  -- [itemName] = { {t=timestamp, p=price}, ... } letzten N Eintraege
 AHT.listingCounts = {} -- [itemName] = Anzahl Listings im AH (letzter Scan)
 
+-- ── Materials-Analyse (Neue Funktion) ────────────────────────
+AHT.materials       = {}   -- [itemName] = true (Liste ueberwachter Materialien)
+AHT.matsSelected    = {}   -- [itemName] = true/false (welche Mats gescannt werden)
+AHT.matsCategories  = {}   -- [itemName] = categoryId (1..10), nil = alle
+AHT.matsResults     = {}   -- Gefilterte/sortierte Ergebnisse fuer Mats-Anzeige
+AHT.matsDisplayResults = {}  -- Auf dem Bildschirm angezeigte Results
+AHT.matsHistory     = {}   -- [itemName] = { {t=timestamp, p=price, weighted_avg}, ... }
+AHT.matsSortMode    = "deviation"  -- "name", "current", "deviation", "weighted_avg"
+AHT.matsSortDir     = "desc"        -- "asc" oder "desc"
+AHT.matsSearchFilter = ""
+AHT.matsButton      = nil           -- Referenz zum Mats-Button
+
+-- Browse-Kategorien (QueryAuctionItems classIndex)
+AHT.MAT_CATEGORY_IDS = {
+    { id = 1, key = "cat_weapon" },
+    { id = 2, key = "cat_armor" },
+    { id = 3, key = "cat_container" },
+    { id = 4, key = "cat_consumable" },
+    { id = 5, key = "cat_trade_goods" },
+    { id = 6, key = "cat_projectile" },
+    { id = 7, key = "cat_quiver" },
+    { id = 8, key = "cat_recipe" },
+    { id = 9, key = "cat_reagent" },
+    { id = 10, key = "cat_misc" },
+}
+
 -- Sortierung & Filter
 AHT.sortMode       = "profit"  -- "profit" oder "margin"
 AHT.sortDir        = "desc"    -- "asc" oder "desc"
@@ -210,8 +236,10 @@ SlashCmdList["TWOW_AHT"] = function(msg)
         AHT:StartSnipeScan()
     elseif msg == "post" then
         AHT:Print(L["post_hint"])
-    elseif msg == "rezepte" or msg == "recipes" then
+    elseif msg == "recipes" then
         AHT:PrintRecipes()
+    elseif msg == "mats" then
+        AHT:ShowMatsDialog()
     elseif msg == "debug" then
         AHT:Print(string.format(L["debug_version"], AHT.VERSION))
         AHT:Print(string.format(L["debug_recipes"], getn(AHT.recipes)))
@@ -223,6 +251,7 @@ SlashCmdList["TWOW_AHT"] = function(msg)
         AHT:Print(L["help_show"])
         AHT:Print(L["help_scan"])
         AHT:Print(L["help_snipe"])
+        AHT:Print(L["help_mats"])
         AHT:Print(L["help_stop"])
         AHT:Print(L["help_reset"])
         AHT:Print(L["help_recipes"])
@@ -240,6 +269,10 @@ function AHT:OnLoad()
         AHT.priceUpdated = TWOW_AHT_DB.priceUpdated or {}
         AHT.priceHistory = TWOW_AHT_DB.priceHistory or {}
         AHT.listingCounts = TWOW_AHT_DB.listingCounts or {}
+        AHT.materials    = TWOW_AHT_DB.materials    or {}
+        AHT.matsSelected = TWOW_AHT_DB.matsSelected or {}
+        AHT.matsCategories = TWOW_AHT_DB.matsCategories or {}
+        AHT.matsHistory  = TWOW_AHT_DB.matsHistory  or {}
     end
     -- Vendor-Preise in die Preistabelle eintragen
     for name, price in pairs(AHT.vendorPrices) do
@@ -256,6 +289,10 @@ function AHT:SaveDB()
     TWOW_AHT_DB.priceUpdated = AHT.priceUpdated
     TWOW_AHT_DB.priceHistory = AHT.priceHistory
     TWOW_AHT_DB.listingCounts = AHT.listingCounts
+    TWOW_AHT_DB.materials    = AHT.materials
+    TWOW_AHT_DB.matsSelected = AHT.matsSelected
+    TWOW_AHT_DB.matsCategories = AHT.matsCategories
+    TWOW_AHT_DB.matsHistory  = AHT.matsHistory
 end
 
 -- ── Debug-Ausgabe ────────────────────────────────────────────
@@ -279,9 +316,72 @@ function AHT:PrintRecipes()
     end
 end
 
+-- ── Materials-Management ──────────────────────────────────────
+function AHT:AddMaterial(itemName, categoryId)
+    if not itemName or itemName == "" then return end
+    AHT.materials[itemName] = true
+    AHT.matsSelected[itemName] = true
+    if categoryId and categoryId > 0 then
+        AHT.matsCategories[itemName] = categoryId
+    else
+        AHT.matsCategories[itemName] = nil
+    end
+    AHT:SaveDB()
+end
+
+function AHT:RemoveMaterial(itemName)
+    if not itemName then return end
+    AHT.materials[itemName] = nil
+    AHT.matsSelected[itemName] = nil
+    AHT.matsCategories[itemName] = nil
+    AHT:SaveDB()
+end
+
+function AHT:GetMatCategoryId(itemName)
+    return AHT.matsCategories[itemName]
+end
+
+function AHT:SetMatCategory(itemName, categoryId)
+    if not itemName or not AHT.materials[itemName] then return end
+    if categoryId and categoryId > 0 then
+        AHT.matsCategories[itemName] = categoryId
+    else
+        AHT.matsCategories[itemName] = nil
+    end
+    AHT:SaveDB()
+end
+
+function AHT:GetMatCategoryLabel(categoryId)
+    local L = AHT.L
+    if not categoryId or categoryId <= 0 then
+        return L["mats_category_all"] or "Alle"
+    end
+    for _, cat in ipairs(AHT.MAT_CATEGORY_IDS) do
+        if cat.id == categoryId then
+            return L[cat.key] or tostring(categoryId)
+        end
+    end
+    return tostring(categoryId)
+end
+
+function AHT:GetMaterialsList()
+    local list = {}
+    for name, _ in pairs(AHT.materials) do
+        tinsert(list, name)
+    end
+    table.sort(list)
+    return list
+end
+
+function AHT:ShowMatsDialog()
+    -- Placeholder - wird in UI.lua implementiert
+    AHT:Print("Mats-Dialog wird in UI.lua angezeigt.")
+end
+
 -- ── Event-Frame ───────────────────────────────────────────────
 local evtFrame = CreateFrame("Frame", "TWOW_AHT_EventFrame")
 evtFrame:RegisterEvent("VARIABLES_LOADED")
+evtFrame:RegisterEvent("PLAYER_LOGOUT")
 evtFrame:RegisterEvent("TRADE_SKILL_SHOW")
 evtFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
 evtFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
@@ -293,6 +393,8 @@ evtFrame:RegisterEvent("UI_ERROR_MESSAGE")
 evtFrame:SetScript("OnEvent", function()
     if event == "VARIABLES_LOADED" then
         AHT:OnLoad()
+    elseif event == "PLAYER_LOGOUT" then
+        AHT:SaveDB()
     elseif event == "TRADE_SKILL_SHOW" then
         AHT:LearnRecipes()
     elseif event == "AUCTION_HOUSE_SHOW" then
@@ -304,8 +406,12 @@ evtFrame:SetScript("OnEvent", function()
             AHT:OnPostPriceCheckResult()
         elseif AHT:IsPosting() then
             -- Poster ignoriert AUCTION_ITEM_LIST_UPDATE
+        elseif AHT.IsMatsBuying and AHT:IsMatsBuying() then
+            AHT:OnMatsBuyAuctionListUpdate()
         elseif AHT:IsBuying() then
             AHT:OnBuyAuctionListUpdate()
+        elseif AHT:IsMatScanning() then
+            AHT:OnMatsAuctionListUpdate()
         else
             AHT:OnAuctionListUpdate()
         end
@@ -317,6 +423,15 @@ evtFrame:SetScript("OnEvent", function()
         -- Fehlgeschlagene Bids: buyLocked sofort freigeben
         if AHT.buyLocked and arg1 then
             AHT.buyLocked = false
+        end
+        if AHT.matsBuyLocked and arg1 then
+            AHT.matsBuyLocked = false
+            AHT.matsBuyPending = nil
+            if AHT.IsMatsBuying and AHT:IsMatsBuying() then
+                AHT.matsBuyState = "waiting"
+                AHT.matsBuyTimer = 0
+                AHT.matsBuySentTimer = 0
+            end
         end
     elseif event == "NEW_AUCTION_UPDATE" then
         if AHT:IsPosting() then
@@ -330,6 +445,12 @@ evtFrame:SetScript("OnUpdate", function()
     -- Nur aktive Zustandsautomaten aufrufen
     if AHT.scanState ~= "idle" then
         AHT:OnUpdate(dt)
+    end
+    if AHT:IsMatScanning() then
+        AHT:OnUpdateMats(dt)
+    end
+    if AHT.IsMatsBuying and AHT:IsMatsBuying() then
+        AHT:OnMatsBuyUpdate(dt)
     end
     if AHT.buyState ~= "idle" then
         AHT:OnBuyUpdate(dt)
@@ -367,6 +488,12 @@ end)
 function AHT:OnAHClosed()
     if AHT:IsScanning() then
         AHT:CancelScan()
+    end
+    if AHT:IsMatScanning() then
+        AHT:CancelMatsScan()
+    end
+    if AHT.IsMatsBuying and AHT:IsMatsBuying() then
+        AHT:CancelMatsBuy(true)
     end
     if AHT:IsBuying() then
         AHT:CancelBuy()

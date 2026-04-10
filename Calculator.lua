@@ -177,3 +177,143 @@ function AHT:ApplyFilterAndSort()
 
     AHT.displayResults = filtered
 end
+
+-- ══════════════════════════════════════════════════════════════
+-- MATERIALS - Neue Berechnung für Material-Analyse
+-- ══════════════════════════════════════════════════════════════
+
+-- ── Gewichteter Durchschnitt mit zeitbasiertem Gewicht ────────
+-- Scans älter als 60 Tage (2 Monate) sind irrelevant
+-- Lineare Gewichtung: Neueste = 1.0, Älteste (60 Tage) = 0.0
+function AHT:CalcWeightedMatAverage(matName, currentPrice)
+    local hist = AHT.matsHistory[matName]
+    if not hist or getn(hist) == 0 then
+        return currentPrice or 0
+    end
+
+    local now = time()
+    local maxAge = 60 * 24 * 3600  -- 60 Tage in Sekunden
+    local sumWeightedPrice = 0
+    local sumWeight = 0
+
+    -- Alle Eintraege durchlaufen
+    for _, entry in ipairs(hist) do
+        local ageSeconds = now - entry.t
+        local ageDays = math.floor(ageSeconds / (24 * 3600))
+
+        -- Nur Eintraege die älter als MaxAge sind ignorieren
+        if ageDays <= 60 then
+            -- Lineare Gewichtung: je neuer desto hoher
+            local weight = math.max(0, 1 - (ageDays / 60))
+            sumWeightedPrice = sumWeightedPrice + (entry.p * weight)
+            sumWeight = sumWeight + weight
+        end
+    end
+
+    if sumWeight > 0 then
+        return math.floor(sumWeightedPrice / sumWeight)
+    else
+        return currentPrice or 0
+    end
+end
+
+-- ── Mats-Margin Berechnung ──────────────────────────────────
+function AHT:CalculateMatsMargins()
+    local results = {}
+
+    for matName, _ in pairs(AHT.materials) do
+        local currentPrice = AHT.prices[matName] or 0
+        local weighted_avg = nil
+        local deviation = nil
+
+        if AHT.matsHistory[matName] and getn(AHT.matsHistory[matName]) > 0 then
+            -- Hole den letzten gewichteten Durchschnitt
+            local lastEntry = AHT.matsHistory[matName][getn(AHT.matsHistory[matName])]
+            weighted_avg = lastEntry.weighted_avg or currentPrice
+
+            -- Abweichung vom Durchschnitt berechnen
+            if weighted_avg and weighted_avg > 0 then
+                if currentPrice > 0 then
+                    deviation = ((currentPrice - weighted_avg) / weighted_avg) * 100
+                else
+                    -- Kein aktueller AH-Preis vorhanden => effektiv 100% unter dem Mittel
+                    deviation = -100
+                end
+            else
+                deviation = 0
+            end
+        else
+            weighted_avg = currentPrice
+            deviation = 0
+        end
+
+        -- Listing Count
+        local listingCount = AHT.listingCounts[matName] or 0
+
+        -- Zeitstempel der letzten Aktualisierung (bevorzugt aus Mats-Historie)
+        local lastUpdate = AHT.priceUpdated[matName]
+        local mHist = AHT.matsHistory[matName]
+        if mHist and getn(mHist) > 0 then
+            local last = mHist[getn(mHist)]
+            if last and last.t then
+                lastUpdate = last.t
+            end
+        end
+
+        tinsert(results, {
+            name            = matName,
+            currentPrice    = currentPrice or 0,
+            weighted_avg    = weighted_avg or 0,
+            deviation       = deviation or 0,
+            listingCount    = listingCount,
+            lastUpdate      = lastUpdate,
+            isSelected      = AHT.matsSelected[matName] ~= false,
+            historyLength   = getn(AHT.matsHistory[matName] or {}),
+        })
+    end
+
+    AHT.matsResults = results
+    AHT:ApplyMatsFilterAndSort()
+    return results
+end
+
+-- ── Mats Filter & Sortierung anwenden ────────────────────────
+function AHT:ApplyMatsFilterAndSort()
+    local filtered = {}
+    local filter = strlower(AHT.matsSearchFilter or "")
+
+    for _, r in ipairs(AHT.matsResults) do
+        if filter == "" or strfind(strlower(r.name), filter, 1, true) then
+            tinsert(filtered, r)
+        end
+    end
+
+    -- Sortierung
+    local mode = AHT.matsSortMode or "deviation"
+    local isDesc = (AHT.matsSortDir or "desc") == "desc"
+
+    table.sort(filtered, function(a, b)
+        local va, vb
+        if mode == "current" then
+            va = a.currentPrice
+            vb = b.currentPrice
+        elseif mode == "weighted_avg" then
+            va = a.weighted_avg
+            vb = b.weighted_avg
+        elseif mode == "deviation" then
+            va = a.deviation
+            vb = b.deviation
+        else  -- "name"
+            va = a.name
+            vb = b.name
+        end
+
+        if isDesc then
+            if mode == "name" then return va > vb else return va > vb end
+        else
+            if mode == "name" then return va < vb else return va < vb end
+        end
+    end)
+
+    AHT.matsDisplayResults = filtered
+end

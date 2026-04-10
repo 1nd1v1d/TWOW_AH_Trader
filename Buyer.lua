@@ -358,6 +358,11 @@ end
 
 -- ── ERR_AUCTION_BID_PLACED Handler ───────────────────────────
 function AHT:OnBidPlaced()
+    if AHT.IsMatsBuying and AHT:IsMatsBuying() and AHT.OnMatsBidPlaced then
+        AHT:OnMatsBidPlaced()
+        return
+    end
+
     AHT.buyLocked = false
 
     -- Zaehler erst nach Bestaetigung aktualisieren

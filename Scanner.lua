@@ -32,6 +32,7 @@ AHT.lastScanTime = nil    -- GetTime() beim letzten abgeschlossenen Scan
 -- ── AH oeffnen ───────────────────────────────────────────────
 function AHT:OnAHShow()
     AHT:CreateScanButton()
+    AHT:CreateMatsButton()
 end
 
 -- ── Scan-Button ──────────────────────────────────────────────
@@ -390,4 +391,305 @@ function AHT:StartSnipeScan()
     AHT:SetScanButtonText(AHT.L["scan_cancel"])
 
     AHT:AdvanceScanQueue()
+end
+
+-- ══════════════════════════════════════════════════════════════
+-- MATERIALS SCAN - Neue Funktionen fuer Material-Analyse
+-- ══════════════════════════════════════════════════════════════
+
+-- ── Mats-Button erstellen ─────────────────────────────────────
+function AHT:CreateMatsButton()
+    if AHT.matsButton then
+        AHT.matsButton:Show()
+        return
+    end
+
+    local btn = CreateFrame("Button", "TWOW_AHT_MatsBtn", AuctionFrame, "UIPanelButtonTemplate")
+    btn:SetWidth(135)
+    btn:SetHeight(22)
+    btn:SetText((AHT.L and AHT.L["mats_button"]) or "Mats Analyse")
+    btn:SetPoint("TOPLEFT", AuctionFrame, "TOPLEFT", 210, -28)
+    btn:SetScript("OnClick", function()
+        if AHT:IsMatScanning() then
+            AHT:CancelMatsScan()
+        else
+            AHT:ShowMatsUI()
+        end
+    end)
+
+    -- Tooltip
+    btn:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("TWOW AH Trader - Mats")
+        if AHT:IsMatScanning() then
+            GameTooltip:AddLine(AHT.L["mats_tooltip_cancel"], 1, 0.5, 0.5)
+        else
+            GameTooltip:AddLine(AHT.L["mats_tooltip_open"], 1, 1, 1)
+            if AHT:TableCount(AHT.materials) == 0 then
+                GameTooltip:AddLine(AHT.L["mats_tooltip_no_materials"], 1, 0.5, 0.5)
+            else
+                GameTooltip:AddLine(string.format(AHT.L["mats_tooltip_ready"], AHT:TableCount(AHT.materials)))
+            end
+        end
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    AHT.matsButton = btn
+end
+
+-- ── Pruefen ob Material-Scan laeuft ──────────────────────────
+function AHT:IsMatScanning()
+    return AHT.matsScanState and AHT.matsScanState ~= "idle" or false
+end
+
+-- ── Materials Scan-State initialisieren ──────────────────────
+AHT.matsScanState    = "idle"
+AHT.matsScanTimer    = 0
+AHT.matsSentTimer    = 0
+AHT.matsScanRetries  = 0
+AHT.matsScanQueue    = {}
+AHT.matsScanQueueIdx = 0
+AHT.matsCurrentItem  = nil
+AHT.matsCurrentPage  = 0
+AHT.matsScanMinPrices = {}
+AHT.matsScanListingCounts = {}
+AHT.matsScanOffers = {}         -- Temp: [itemName] = { {ppu=, count=, buyout=} ... }
+AHT.matsOfferCache = {}         -- Runtime-Cache fuer Mats-Kaufvorschau
+
+-- ── Mats Scan starten ────────────────────────────────────────
+function AHT:StartMatsScan()
+    if AHT:IsMatScanning() then
+        AHT:Print(AHT.L["mats_scan_already_running"])
+        return
+    end
+
+    if not AuctionFrame or not AuctionFrame:IsVisible() then
+        AHT:Print(AHT.L["scan_ah_required"])
+        return
+    end
+
+    if AHT:TableCount(AHT.materials) == 0 then
+        AHT:Print(AHT.L["mats_no_materials"])
+        return
+    end
+
+    -- Build queue aus ausgewaehlten Materialien
+    local queue = {}
+    for name, _ in pairs(AHT.materials) do
+        if AHT.matsSelected[name] ~= false then
+            tinsert(queue, name)
+        end
+    end
+
+    if getn(queue) == 0 then
+        AHT:Print(AHT.L["mats_no_selected"])
+        return
+    end
+
+    AHT.matsScanQueue     = queue
+    AHT.matsScanQueueIdx  = 0
+    AHT.matsScanMinPrices = {}
+    AHT.matsScanListingCounts = {}
+    AHT.matsScanOffers = {}
+    AHT.matsScanState     = "waiting"
+    AHT.matsScanTimer     = 0
+    AHT.matsSentTimer     = 0
+
+    AHT:Print(string.format(AHT.L["mats_scan_start"], getn(queue)))
+    if AHT.matsScanBtn then
+        AHT.matsScanBtn:SetText(AHT.L["mats_cancel"])
+    end
+
+    AHT:AdvanceMatsScanQueue()
+end
+
+-- ── Mats Scan abbrechen ──────────────────────────────────────
+function AHT:CancelMatsScan()
+    if not AHT:IsMatScanning() then
+        return
+    end
+    AHT:Print(AHT.L["mats_scan_cancelled"])
+    AHT.matsScanState = "idle"
+    if AHT.matsScanBtn then
+        AHT.matsScanBtn:SetText(AHT.L["mats_button"])
+    end
+    AHT:SaveDB()
+end
+
+-- ── Queue fortschreiten (Naechstes Item) ─────────────────────
+function AHT:AdvanceMatsScanQueue()
+    AHT.matsScanQueueIdx = AHT.matsScanQueueIdx + 1
+
+    if AHT.matsScanQueueIdx > getn(AHT.matsScanQueue) then
+        AHT:OnMatsScanComplete()
+        return
+    end
+
+    AHT.matsCurrentItem = AHT.matsScanQueue[AHT.matsScanQueueIdx]
+    AHT.matsCurrentPage = 0
+    AHT.matsScanRetries = 0
+    AHT.matsScanState = "waiting"
+    AHT.matsScanTimer = 0
+    AHT.matsSentTimer = 0
+end
+
+-- ── OnScanComplete fuer Materials ────────────────────────────
+function AHT:OnMatsScanComplete()
+    AHT.matsScanState = "idle"
+    local now = time()
+
+    -- Scan-Ergebnisse in matsHistory eintragen mit Gewicht
+    for name, price in pairs(AHT.matsScanMinPrices) do
+        -- Aktuellen Preis fuer Mats-Liste / Kaufdialog uebernehmen
+        AHT.prices[name] = price
+        AHT.priceUpdated[name] = now
+
+        if not AHT.matsHistory[name] then
+            AHT.matsHistory[name] = {}
+        end
+        -- Gewichteten Durchschnitt berechnen
+        local weightedAvg = AHT:CalcWeightedMatAverage(name, price)
+        tinsert(AHT.matsHistory[name], {
+            t = now,
+            p = price,
+            weighted_avg = weightedAvg
+        })
+        -- Nur letzte 100 Eintraege pro Material
+        while getn(AHT.matsHistory[name]) > 100 do
+            tremove(AHT.matsHistory[name], 1)
+        end
+    end
+
+    -- Listing-Zahlen aus Mats-Scan uebernehmen
+    for name, cnt in pairs(AHT.matsScanListingCounts) do
+        AHT.listingCounts[name] = cnt
+    end
+    for _, item in ipairs(AHT.matsScanQueue) do
+        if not AHT.matsScanListingCounts[item] then
+            AHT.listingCounts[item] = 0
+        end
+    end
+
+    -- Angebots-Cache fuer Mats-Kaufdialog aktualisieren
+    for name, offers in pairs(AHT.matsScanOffers) do
+        AHT.matsOfferCache[name] = {
+            t = now,
+            offers = offers,
+        }
+    end
+
+    AHT:SaveDB()
+    AHT:CalculateMatsMargins()
+    AHT:RefreshMatsUI()
+
+    -- Buy-Dialog aktualisieren falls offen und dasselbe Material zeigt
+    if AHT.matsBuyDialog and AHT.matsBuyDialog:IsVisible() and AHT.matsBuyDialog.matData then
+        local matName = AHT.matsBuyDialog.matData.name
+        -- matData aus frisch berechneten Ergebnissen holen
+        for _, r in ipairs(AHT.matsDisplayResults or {}) do
+            if r.name == matName then
+                AHT.matsBuyDialog.matData = r
+                AHT.matsBuyDialog.matNameLabel:SetText("|cffffd700" .. r.name .. "|r")
+                AHT.matsBuyDialog.currentLabel:SetText(string.format(AHT.L["mats_buy_current"], AHT:FormatMoneyPlain(r.currentPrice or 0)))
+                AHT.matsBuyDialog.avgLabel:SetText(string.format(AHT.L["mats_buy_weighted_avg"], AHT:FormatMoneyPlain(r.weighted_avg or 0)))
+                AHT.matsBuyDialog.devLabel:SetText(string.format(AHT.L["mats_buy_deviation"], r.deviation or 0))
+                AHT.matsBuyDialog:RefreshCost()
+                break
+            end
+        end
+        -- Rescan-Button wieder freigeben
+        if AHT.matsBuyDialog.btnRescan then
+            AHT.matsBuyDialog.btnRescan:SetText(AHT.L["mats_buy_rescan_btn"] or "Neu scannen")
+            AHT.matsBuyDialog.btnRescan:Enable()
+        end
+    end
+
+    AHT:Print(string.format(AHT.L["mats_scan_complete"], AHT:TableCount(AHT.matsScanMinPrices)))
+
+    if AHT.matsScanBtn then
+        AHT.matsScanBtn:SetText(AHT.L["mats_button"])
+    end
+end
+
+-- ── Mats Update (OnUpdate Integration) ──────────────────────
+-- Diese Funktion wird vom normalen OnUpdate aufgerufen
+function AHT:OnUpdateMats(elapsed)
+    if AHT.matsScanState == "waiting" then
+        AHT.matsScanTimer = AHT.matsScanTimer + elapsed
+        AHT.matsSentTimer = AHT.matsSentTimer + elapsed
+
+        if AHT.matsSentTimer >= AHT.WAIT_TIMEOUT then
+            AHT:Print(string.format(AHT.L["scan_timeout"], (AHT.matsCurrentItem or "?")))
+            AHT:AdvanceMatsScanQueue()
+            return
+        end
+
+        if AHT.matsScanTimer >= AHT.SCAN_DELAY then
+            AHT.matsScanTimer = 0
+            if CanSendAuctionQuery() then
+                local catId = AHT:GetMatCategoryId(AHT.matsCurrentItem)
+                AHT.matsSentTimer = 0
+                AHT.matsScanState = "sent"
+                QueryAuctionItems(AHT.matsCurrentItem, nil, nil, nil, catId, nil, AHT.matsCurrentPage, nil, nil)
+            end
+        end
+
+    elseif AHT.matsScanState == "sent" then
+        AHT.matsSentTimer = AHT.matsSentTimer + elapsed
+        if AHT.matsSentTimer >= AHT.SENT_TIMEOUT then
+            AHT.matsSentTimer = 0
+            AHT.matsScanRetries = AHT.matsScanRetries + 1
+            if AHT.matsScanRetries > AHT.MAX_RETRIES then
+                AHT:Print(string.format(AHT.L["scan_timeout"], (AHT.matsCurrentItem or "?")))
+                AHT:AdvanceMatsScanQueue()
+            else
+                AHT.matsScanState = "waiting"
+                AHT.matsScanTimer = 0
+            end
+        end
+    end
+end
+
+-- ── AH-Ergebnis verarbeiten (Mats) ───────────────────────────
+function AHT:OnMatsAuctionListUpdate()
+    if AHT.matsScanState ~= "sent" then return end
+    AHT.matsSentTimer = 0
+
+    local numItems = GetNumAuctionItems("list")
+    local playerName = UnitName("player")
+
+    for i = 1, numItems do
+        local name, texture, count, quality, canUse, level,
+              minBid, minIncrement, buyoutPrice,
+              bidAmount, highBidder, owner = GetAuctionItemInfo("list", i)
+
+        if name == AHT.matsCurrentItem
+           and buyoutPrice and buyoutPrice > 0
+           and count and count > 0
+           and owner ~= playerName then
+            local ppu = math.floor(buyoutPrice / count)
+            if not AHT.matsScanMinPrices[name] or ppu < AHT.matsScanMinPrices[name] then
+                AHT.matsScanMinPrices[name] = ppu
+            end
+            AHT.matsScanListingCounts[name] = (AHT.matsScanListingCounts[name] or 0) + 1
+
+            if not AHT.matsScanOffers[name] then
+                AHT.matsScanOffers[name] = {}
+            end
+            tinsert(AHT.matsScanOffers[name], {
+                ppu = ppu,
+                count = count,
+                buyout = buyoutPrice,
+            })
+        end
+    end
+
+    if numItems >= 50 then
+        AHT.matsCurrentPage = AHT.matsCurrentPage + 1
+        AHT.matsScanState = "waiting"
+        AHT.matsScanTimer = 0
+    else
+        AHT:AdvanceMatsScanQueue()
+    end
 end

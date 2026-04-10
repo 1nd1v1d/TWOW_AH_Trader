@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-WoW-Addon für Turtle WoW (1.12.1 vanilla), das AH-Preise von Alchemie-Tränken und deren Zutaten scannt, die Herstellungsmargen berechnet und eine Empfehlung für den profitabelsten Trank ausspricht. Optional können Zutaten direkt aus dem AH gekauft werden, wobei eine Mindestmarge von 10 % eingehalten wird.
+WoW-Addon für Turtle WoW (1.12.1 vanilla), das AH-Preise von Alchemie-Tränken und deren Zutaten scannt, die Herstellungsmargen berechnet und eine Empfehlung für den profitabelsten Trank ausspricht. Zusätzlich gibt es eine separate Mats-Analyse für frei definierbare Materialien mit historisch gewichteter Preisbewertung. Optional können Zutaten direkt aus dem AH gekauft werden, wobei eine Mindestmarge von 10 % eingehalten wird.
 
 ## Dateistruktur
 
@@ -17,6 +17,7 @@ TWOW_AH_Trader/
 ├── Buyer.lua             – Automatischer AH-Einkauf mit Margenschutz
 ├── Poster.lua            – Automatisches AH-Posten von Tränken
 ├── UI.lua                – Scrollbares Ergebnisfenster + Kaufdialog
+├── Mats.lua              – Materialverwaltung + Mats-Analyse UI + Mats-Kaufdialog
 └── DOKUMENTATION.md      – Diese Datei
 ```
 
@@ -24,16 +25,27 @@ TWOW_AH_Trader/
 
 Ordner `TWOW_AH_Trader` nach `World of Warcraft/Interface/AddOns/` kopieren.
 
+### Lokale Deployment-Notiz (TurtleWoW)
+
+Fuer diese Umgebung wird das Addon nach jeder Umsetzung in folgenden Ordner synchronisiert:
+
+`/home/daos/Games/TurtleWoW/Interface/AddOns/TWOW_AH_Trader/`
+
+Zusatz-Workflow:
+- Nach jeder Code-Umsetzung wird diese Dokumentation aktualisiert.
+- Danach wird der aktuelle Addon-Stand direkt in den obigen AddOns-Ordner kopiert.
+
 ## Benutzung
 
-1. **Alchemie-Fenster öffnen** → Addon lädt automatisch alle bekannten Rezepte
-2. **Auktionshaus öffnen** → Button "Trank-Analyse" erscheint am oberen Rand des AH-Fensters
-3. **Button klicken** → Ergebnisfenster öffnet sich (zeigt letzte gespeicherte Preisdaten)
-4. **"Scannen" klicken** → AH-Scan startet, aktuelle Preise werden abgefragt
-5. **Rezepte auswählen** → Checkboxen in der Ergebnisliste an/aus schalten
-6. **Kostendetails einsehen** → Maus über eine Zeile halten (Tooltip)
-7. **Zutaten kaufen** → Rechtsklick auf eine profitable Zeile → Kaufdialog
-8. Alternativ: `/aht` oder `/ahtrader` im Chat
+1. **Alchemie-Fenster öffnen** → Addon lädt automatisch alle bekannten Rezepte.
+2. **Auktionshaus öffnen** → Buttons "Trank-Analyse" und "Mats Analyse" erscheinen.
+3. **Trank-Analyse öffnen** → gespeicherte Ergebnisse ansehen und Rezepte auswählen.
+4. **"Scannen" klicken** → AH-Scan für Tränke/Zutaten starten.
+5. **Kostendetails einsehen** → Maus über eine Zeile halten (Tooltip).
+6. **Zutaten kaufen** → Rechtsklick auf eine profitable Zeile (Kaufdialog).
+7. **Mats verwalten** → `/aht mats` öffnen, Materialien hinzufügen/entfernen.
+8. **Mats scannen** → im Mats-Fenster ausgewählte Materialien scannen.
+9. **Preisabweichungen nutzen** → aktueller Preis vs. gewichteter Durchschnitt.
 
 ## Slash-Befehle
 
@@ -44,6 +56,7 @@ Ordner `TWOW_AH_Trader` nach `World of Warcraft/Interface/AddOns/` kopieren.
 | `/aht scan`         | Scan manuell starten (AH muss offen)                     |
 | `/aht stop`         | Laufenden Scan oder Kauf abbrechen (Alias: `/aht cancel`) |
 | `/aht rezepte`      | Geladene Rezepte im Chat ausgeben (Alias: `/aht recipes`) |
+| `/aht mats`         | Materialien-Management Dialog öffnen                       |
 | `/aht reset`        | Gespeicherte Preisdaten löschen                           |
 | `/aht snipe`        | Schnäppchen-Scan: Alle bekannten Items auf Deals prüfen   |
 | `/aht post`         | Hilfe zum Tränke posten anzeigen                          |
@@ -69,6 +82,25 @@ Ordner `TWOW_AH_Trader` nach `World of Warcraft/Interface/AddOns/` kopieren.
 - Geschätzte Gesamtkosten werden live aktualisiert
 - "Kaufen" startet den automatischen AH-Einkauf
 - Nach dem Kauf: Zusammenfassung im Chat + Hinweis welche Vendor-Items noch fehlen
+
+### Mats-Analyse Fenster
+- Design analog zur Trank-Analyse (gleicher Fensterrahmen, Status-Zeile oben, Buttons unten)
+- Status-Zeile oben zeigt Anzahl analysierter Materialien oder Scan-Fortschritt
+- Checkbox pro Material für den nächsten Mats-Scan (an/aus)
+- Buttons unten: **"Scannen/Abbrechen"** | **"Materialverwaltung"** | **"Alle an"** | **"Alle aus"**
+- Scan läuft nur für angehakte Materialien; Scan-Button wechselt auf "Abbrechen" während Scan läuft
+- Rechtsklick auf ein Material öffnet den Mats-Kaufdialog
+- Spalten: aktueller Preis, gewichteter Durchschnitt, Abweichung, Listings, Scans
+- In der Materialspalte wird hinter dem Namen das letzte Scan-Datum mit Uhrzeit angezeigt
+
+### Material-Management Dialog
+- Öffnen über `/aht mats`
+- Materialname manuell eingeben und hinzufügen
+- Kategorie pro Material per Dropdown auswählbar (Waffe, Rüstung, Behaelter, Verbrauchbar, Handwerkswaren, Projektil, Koecher, Rezept, Reagenz, Verschiedenes)
+- Wenn keine Kategorie gesetzt ist, scannt das Addon über alle Kategorien
+- Materialien per Checkbox markieren und gesammelt entfernen (**Auswahl entfernen**)
+- Änderung wird persistent gespeichert
+- Änderungen werden sofort im offenen Mats-Fenster sichtbar (kein Neuöffnen nötig)
 
 ## Rezepterkennung
 
@@ -136,6 +168,79 @@ Da der Vendor-Verkaufspreis nicht per API abfragbar ist, wird er als ~2 % des AH
 4. Nur Angebote werden gekauft, bei denen die **Marge ≥ 10 % bleibt**
 5. Phiolen und andere Vendor-Items werden übersprungen (beim Händler günstiger)
 6. Am Ende: Zusammenfassung im Chat mit gekauften/fehlenden Items
+
+## Material-Analyse (Mats)
+
+Die Material-Analyse ermöglicht es, beliebige Materialien zu überwachen und deren Preisabweichungen vom gewichteten Durchschnitt zu verfolgen.
+
+### Funktionsweise
+
+1. **Materialien hinzufügen**: `/aht mats` öffnet den Management-Dialog.
+   - Item-Namen eingeben und "Hinzufügen" klicken.
+   - Optional eine Kategorie im Dropdown wählen, um den Scan zu beschleunigen.
+   - Materialien können später wieder entfernt werden.
+
+2. **Materialien scannen**: "Mats Analyse" Button im AH-Fenster
+   - Nur angehakte Materialien werden gescannt.
+   - Preis pro Stück wird erfasst.
+   - Mit gesetzter Kategorie wird gezielt in dieser Kategorie gesucht.
+
+3. **Gewichtete Durchschnittsberechnung**:
+   - Der historische Mittelwert wird mit zeitbasiertem Gewicht berechnet.
+   - **Neuere Scans** haben mehr Einfluss (höheres Gewicht).
+   - **Ältere Scans** haben weniger Einfluss.
+   - **Scans älter als 60 Tage** werden nicht mehr berücksichtigt.
+
+4. **Abweichungsanzeige**:
+   - Zeigt die Differenz zwischen aktuellem Preis und gewichtetem Durchschnitt.
+   - **Grün**: -20% oder mehr (günstiges Angebot).
+   - **Gelb**: -20% bis +20% (normaler Preis).
+   - **Rot**: +20% oder mehr (teuer).
+   - Anzeige erfolgt mit Nachkommastelle (z. B. `+0.8%`) statt nur ganzzahlig.
+   - Falls aktuell kein AH-Preis vorhanden ist, wird die Abweichung als `-100.0%` dargestellt.
+
+### UI-Spalten
+
+| Spalte | Bedeutung |
+|--------|-----------|
+| **Material** | Name des Rohstoffs/Materials |
+| **Aktuell** | Günstigster Buyout im AH (pro Stück) |
+| **Gewicht. Avg** | Gewichteter Durchschnitt der letzten 60 Tage |
+| **Abweichung** | +/- Prozentuale Differenz zum Durchschnitt |
+| **Listings** | Anzahl Angebote im AH |
+| **Scans** | Anzahl erfasster Preispunkte in der Historie |
+
+### Material-Kauf
+
+- **Rechtsklick** auf ein Material öffnet den Kaufdialog (Design analog zum "Zutaten kaufen"-Dialog der Trank-Analyse)
+- Gewünschte Menge eingeben
+- Optional: **Max. Abweichung (%)** festlegen (negative und positive Werte möglich)
+   - Positive Werte: Kaufe bis zu X % unter dem Weighted-Avg (z. B. `10` = `-10%`)
+   - Negative Werte: Erlaubt höhere Preise (z. B. `-5` = bis zu `+5%` über Weighted-Avg)
+   - Der angezeigte **Max Kaufpreis** aktualisiert sich sofort auf Basis dieser Eingabe
+- Anzeige im Dialog:
+   - Geschätzte Gesamtkosten
+   - **Ø Kaufpreis**
+   - **Max Kaufpreis**
+- **Veraltete Daten (>10 Minuten)**: Roter Warnhinweis erscheint + "Neu scannen"-Button
+   - "Neu scannen" scannt **nur das aktuell ausgewählte Material** (nicht alle)
+   - Nach abgeschlossenem Scan wird der Kaufdialog automatisch mit neuen Preisen aktualisiert
+   - Während des Scans ist der Button deaktiviert
+- **Kaufen** startet den Mats-Kauf-Workflow (unabhängig vom Trank-Buyer)
+- Kein automatischer Rescan mehr beim Kauf – der Nutzer entscheidet aktiv
+- Einkauf erfolgt aus den **günstigsten verfügbaren Angeboten zuerst** (nach Stückpreis)
+
+### Gewichtungsformel
+
+```
+weight = max(0, 1 - (alter_in_tagen / 60))
+gewichteter_durchschnitt = Sum(preis * gewicht) / Sum(gewicht)
+```
+
+Beispiel:
+- Scan von heute: Gewicht = 1.0 (voll wirksam)
+- Scan von 30 Tagen: Gewicht = 0.5 (halbgewicht)
+- Scan von 60+ Tagen: Gewicht = 0.0 (keine Auswirkung)
 
 ### Margenschutz
 Für jede Zutat wird ein maximaler Stückpreis (`maxPPU`) berechnet:
@@ -262,8 +367,39 @@ SavedVariable `TWOW_AHT_DB` speichert:
 - `priceUpdated` – Tabelle `[itemName] = Unix-Timestamp` (wann der Preis zuletzt gescannt wurde)
 - `priceHistory` – Tabelle `[itemName] = { {t=timestamp, p=price}, ... }` (letzte 20 Preiseinträge pro Item)
 - `listingCounts` – Tabelle `[itemName] = Anzahl` (AH-Listings bei letztem Scan)
+- `materials` – Tabelle `[itemName] = true` (verwaltete Materialliste)
+- `matsSelected` – Tabelle `[itemName] = true/false` (Material im nächsten Mats-Scan aktiv)
+- `matsCategories` – Tabelle `[itemName] = categoryId` (optionaler Kategorien-Filter pro Material)
+- `matsHistory` – Tabelle `[itemName] = { {t=timestamp, p=price, weighted_avg=...}, ... }` (Mats-Historie)
 
 ## Änderungsprotokoll
+
+### v1.6.0 – 2026-04-09
+**Mats-Analyse + Materialverwaltung + gewichtete Historie:**
+- Neuer AH-Button **Mats Analyse** (separat zur Trank-Analyse)
+- Neues Modul **Mats.lua** für Mats-UI, Management-Dialog und Mats-Kaufdialog
+- Materialien können über `/aht mats` hinzugefügt/entfernt werden
+- Eigene Mats-Liste mit Auswahl pro Material (Checkbox an/aus)
+- **Alle an / Alle aus** für Mats-Auswahl ergänzt
+- Mats-Scan mit AH-Seitenverarbeitung und Timeout-/Retry-Logik
+- Optionaler Kategorien-Filter pro Material (Dropdown im Management-Dialog)
+- Ohne Kategorie: Scan über alle Kategorien
+- Historischer Mittelwert als **zeitgewichteter Durchschnitt**
+- Scans älter als **60 Tage** gehen nicht mehr in den Durchschnitt ein
+- Abweichungsanzeige aktueller Preis vs. gewichteter Durchschnitt (farblich markiert)
+- Abweichungsanzeige auf Dezimalstellen umgestellt (verhindert dauerhafte `0%` Anzeige bei kleinen Preisänderungen)
+- Gewichteter Vergleich ohne Selbst-Beeinflussung durch den aktuellen Preis
+- Materialname zeigt letztes Scan-Datum mit Uhrzeit in der Mats-Liste
+- Mats-Kaufdialog integriert; Kaufausführung nutzt den bestehenden Buyer-Workflow
+- Rechtsklick-Kauf in der Mats-Liste aktiv (Row-RightClick registriert)
+- Management-Dialog: Mehrfach-Entfernen per Checkbox ("Auswahl entfernen")
+- Persistenz um `materials`, `matsSelected`, `matsCategories`, `matsHistory` erweitert
+- Mats-Kauf erweitert:
+   - eigener Kauf-State (nicht Trank-Buyer-Reuse)
+   - 5-Minuten-Rescan vor Kauf bei veralteten Daten
+   - günstigste Angebote zuerst (Stückpreis-Sortierung)
+   - Deviation-Limit im Dialog (nie über Weighted-Avg)
+   - Dialog zeigt Ø/Max-Kaufpreis für die gewünschte Menge
 
 ### v1.5.0 – 2026-04-03
 **Robustheit, Performance, UX-Verbesserungen:**
