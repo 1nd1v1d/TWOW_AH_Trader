@@ -107,7 +107,8 @@ function AHT:StartBuy(recipe, count)
         if not AHT:IsVendorItem(reag.name) then
             local totalNeeded = reag.count * count
             local inBags = AHT:CountItemInBags(reag.name)
-            local actualNeeded = totalNeeded - inBags
+            local sessionBought = AHT.sessionBought[reag.name] or 0
+            local actualNeeded = totalNeeded - inBags - sessionBought
             if actualNeeded > 0 then
                 local maxPPU = AHT:CalcMaxPPU(recipe, reag.name, reag.count)
                 tinsert(list, {
@@ -118,7 +119,8 @@ function AHT:StartBuy(recipe, count)
                     scanPPU     = AHT.prices[reag.name] or 0,
                 })
             else
-                AHT:Print(string.format(L["buy_in_bags_skip"], reag.name, inBags, totalNeeded))
+                local haveTotal = inBags + sessionBought
+                AHT:Print(string.format(L["buy_in_bags_skip"], reag.name, haveTotal, totalNeeded))
             end
         end
     end
@@ -374,13 +376,8 @@ function AHT:OnBidPlaced()
         end
         AHT.buyTotalSpent = AHT.buyTotalSpent + pending.buyout
         AHT.buyItemsBought = AHT.buyItemsBought + pending.count
-
-        AHT:Print(string.format(AHT.L["buy_purchased"],
-                  pending.count, pending.name,
-                  AHT:FormatMoney(pending.buyout),
-                  AHT:FormatMoney(pending.ppu)))
-
-        AHT.buyPendingOffer = nil
+        -- Session-Gedaechtnis: merken fuer spaetere Kaufkalkulationen
+        AHT.sessionBought[pending.name] = (AHT.sessionBought[pending.name] or 0) + pending.count
 
         -- Pruefen ob genug gekauft
         if item and item.bought >= item.totalNeeded then

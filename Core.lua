@@ -30,6 +30,8 @@ AHT.matsSortDir     = "desc"        -- "asc" oder "desc"
 AHT.matsSearchFilter = ""
 AHT.matsButton      = nil           -- Referenz zum Mats-Button
 
+AHT.sessionBought   = {}   -- [itemName] = Anzahl diese AH-Session gekauft (Briefkasten-Puffer)
+
 -- Browse-Kategorien (QueryAuctionItems classIndex)
 AHT.MAT_CATEGORY_IDS = {
     { id = 1, key = "cat_weapon" },
@@ -504,4 +506,6 @@ function AHT:OnAHClosed()
     if AHT.postPriceCheck and AHT.postPriceCheck.state ~= "done" then
         AHT.postPriceCheck = nil
     end
+    -- Kurzzeit-Kaufgedaechtnis loeschen (Items befinden sich nun im Briefkasten oder Taschen)
+    AHT.sessionBought = {}
 end

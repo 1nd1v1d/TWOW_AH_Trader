@@ -22,6 +22,38 @@ local function Trim(s)
     return string.gsub(s, "^%s*(.-)%s*$", "%1")
 end
 
+-- Parst eine Preisangabe (z.B. "5g 20s 10c" oder rohe Kupferzahl) in Kupfer
+local function ParseMoney(s)
+    if not s or s == "" then return 0 end
+    s = string.lower(s)
+    local total = 0
+    local hasUnit = false
+    local _, _, g = string.find(s, "(%d+)%s*g")
+    if g then total = total + tonumber(g) * 10000; hasUnit = true end
+    local _, _, sv = string.find(s, "(%d+)%s*s")
+    if sv then total = total + tonumber(sv) * 100; hasUnit = true end
+    local _, _, cp = string.find(s, "(%d+)%s*c")
+    if cp then total = total + tonumber(cp); hasUnit = true end
+    if not hasUnit then total = tonumber(s) or 0 end
+    return math.floor(total)
+end
+
+-- Formatiert Kupfer als lesbaren Text für Eingabefelder (keine Farb-Codes)
+local function FormatMoneyInput(copper)
+    copper = math.floor(copper or 0)
+    if copper <= 0 then return "0c" end
+    local g = math.floor(copper / 10000)
+    local s = math.floor(mod(copper, 10000) / 100)
+    local c = mod(copper, 100)
+    if g > 0 then
+        return string.format("%dg %ds %dc", g, s, c)
+    elseif s > 0 then
+        return string.format("%ds %dc", s, c)
+    else
+        return string.format("%dc", c)
+    end
+end
+
 -- ═══════════════════════════════════════════════════════════════
 -- MATERIALS MANAGEMENT DIALOG
 -- ═══════════════════════════════════════════════════════════════
@@ -706,7 +738,6 @@ AHT.matsBuyState        = "idle"   -- idle / waiting / sent
 AHT.matsBuyPhase        = nil      -- collect / execute
 AHT.matsBuyItem         = nil
 AHT.matsBuyQuantity     = 0
-AHT.matsBuyDeviationMax = 0
 AHT.matsBuyAllowedPPU   = 0
 AHT.matsBuyTimer        = 0
 AHT.matsBuySentTimer    = 0
@@ -756,22 +787,28 @@ function AHT:BuildMatsBuyPlanFromOffers(offers, quantity, allowedPPU)
     local got = 0
     local cost = 0
     local maxPPU = 0
+    local steps = {}
 
     for _, o in ipairs(filtered) do
         if got >= need then break end
         local take = o.count
-        if got + take > need then
-            take = need - got
-        end
+        if got + take > need then take = need - got end
         got = got + take
-        cost = cost + (o.ppu * take)
+        local stepCost = o.ppu * take
+        cost = cost + stepCost
         if o.ppu > maxPPU then maxPPU = o.ppu end
+        -- gleichpreisige Angebote zusammenfassen
+        local n = getn(steps)
+        if n > 0 and steps[n].ppu == o.ppu then
+            steps[n].take = steps[n].take + take
+            steps[n].cost = steps[n].cost + stepCost
+        else
+            tinsert(steps, { ppu = o.ppu, take = take, cost = stepCost })
+        end
     end
 
     local avgPPU = 0
-    if got > 0 then
-        avgPPU = math.floor(cost / got)
-    end
+    if got > 0 then avgPPU = math.floor(cost / got) end
 
     return {
         available = getn(filtered),
@@ -780,6 +817,7 @@ function AHT:BuildMatsBuyPlanFromOffers(offers, quantity, allowedPPU)
         avgPPU = avgPPU,
         maxPPU = maxPPU,
         enough = got >= need,
+        steps = steps,
     }
 end
 
@@ -793,7 +831,7 @@ function AHT:ShowMatsBuyDialog(matData)
     local quantityBox = dlg.quantityBox
     quantityBox:SetText("1")
     quantityBox:SetFocus()
-    dlg.devLimitBox:SetText("0")
+    dlg.maxPriceBox:SetText(FormatMoneyInput(matData.weighted_avg or matData.currentPrice or 0))
 
     dlg.matNameLabel:SetText("|cffffd700" .. matData.name .. "|r")
     dlg.currentLabel:SetText(string.format(AHT.L["mats_buy_current"], AHT:FormatMoneyPlain(matData.currentPrice or 0)))
@@ -811,7 +849,7 @@ function AHT:CreateMatsBuyDialog()
 
     local dlg = CreateFrame("Frame", "TWOW_AHT_MatsBuyDialog", UIParent)
     dlg:SetWidth(370)
-    dlg:SetHeight(320)
+    dlg:SetHeight(420)
     dlg:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     dlg:SetBackdrop({
         bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
@@ -897,30 +935,38 @@ function AHT:CreateMatsBuyDialog()
     end)
     dlg.quantityBox = quantityBox
 
-    -- Max. Abweichung (%)
-    local devLimitLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    devLimitLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -150)
-    devLimitLabel:SetText(AHT.L["mats_buy_max_dev"])
+    -- Max. Kaufpreis
+    local maxPriceLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    maxPriceLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -150)
+    maxPriceLabel:SetText(AHT.L["mats_buy_max_price"])
 
-    local devLimitBox = CreateFrame("EditBox", nil, dlg, "InputBoxTemplate")
-    devLimitBox:SetWidth(60)
-    devLimitBox:SetHeight(20)
-    devLimitBox:SetPoint("LEFT", devLimitLabel, "RIGHT", 10, 0)
-    devLimitBox:SetAutoFocus(false)
-    devLimitBox:SetMaxLetters(6)
-    devLimitBox:SetScript("OnChar", function()
+    local maxPriceBox = CreateFrame("EditBox", nil, dlg)
+    maxPriceBox:SetWidth(140)
+    maxPriceBox:SetHeight(20)
+    maxPriceBox:SetPoint("LEFT", maxPriceLabel, "RIGHT", 10, 0)
+    maxPriceBox:SetAutoFocus(false)
+    maxPriceBox:SetMaxLetters(20)
+    maxPriceBox:SetFontObject(GameFontHighlight)
+    maxPriceBox:SetTextInsets(6, 6, 0, 0)
+    maxPriceBox:SetBackdrop({
+        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 8, edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    maxPriceBox:SetBackdropColor(0, 0, 0, 0.8)
+    maxPriceBox:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.9)
+    maxPriceBox:SetScript("OnChar", function()
         local char = arg1
-        if char and (string.find(char, "[0-9]") or char == "-") then
-            return
-        end
+        if char and string.find(char, "[0-9gsc ]") then return end
         this:SetText(string.sub(this:GetText(), 1, -2))
     end)
-    devLimitBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
-    devLimitBox:SetScript("OnEnterPressed", function() this:ClearFocus() end)
-    devLimitBox:SetScript("OnTextChanged", function()
+    maxPriceBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
+    maxPriceBox:SetScript("OnEnterPressed", function() this:ClearFocus() end)
+    maxPriceBox:SetScript("OnTextChanged", function()
         if dlg.RefreshCost then dlg:RefreshCost() end
     end)
-    dlg.devLimitBox = devLimitBox
+    dlg.maxPriceBox = maxPriceBox
 
     -- Trennlinie 2
     local sep2 = dlg:CreateTexture(nil, "ARTWORK")
@@ -929,21 +975,33 @@ function AHT:CreateMatsBuyDialog()
     sep2:SetPoint("TOPRIGHT", dlg, "TOPRIGHT", -14, -171)
     sep2:SetHeight(1)
 
-    -- Kosten-Vorschau
-    local costLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    costLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -182)
-    costLabel:SetWidth(330)
-    dlg.costLabel = costLabel
+    -- Kaufplan-Anzeige
+    local planHeaderLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    planHeaderLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -182)
+    planHeaderLabel:SetWidth(330)
+    planHeaderLabel:SetJustifyH("LEFT")
+    dlg.planHeaderLabel = planHeaderLabel
 
-    local avgBuyLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    avgBuyLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -199)
-    avgBuyLabel:SetWidth(330)
-    dlg.avgBuyLabel = avgBuyLabel
+    dlg.planRows = {}
+    for i = 1, 6 do
+        local row = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row:SetPoint("TOPLEFT", dlg, "TOPLEFT", 28, -182 - i * 16)
+        row:SetWidth(310)
+        row:SetJustifyH("LEFT")
+        dlg.planRows[i] = row
+    end
 
-    local maxBuyLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    maxBuyLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -216)
-    maxBuyLabel:SetWidth(330)
-    dlg.maxBuyLabel = maxBuyLabel
+    local sep3 = dlg:CreateTexture(nil, "ARTWORK")
+    sep3:SetTexture(0.6, 0.6, 0.6, 0.4)
+    sep3:SetPoint("TOPLEFT",  dlg, "TOPLEFT",  14, -293)
+    sep3:SetPoint("TOPRIGHT", dlg, "TOPRIGHT", -14, -293)
+    sep3:SetHeight(1)
+
+    local planTotalLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    planTotalLabel:SetPoint("TOPLEFT", dlg, "TOPLEFT", 20, -302)
+    planTotalLabel:SetWidth(330)
+    planTotalLabel:SetJustifyH("LEFT")
+    dlg.planTotalLabel = planTotalLabel
 
     -- Buttons (wie Trank-Kaufdialog: BOTTOMLEFT und BOTTOMRIGHT)
     local btnBuy = CreateFrame("Button", nil, dlg, "UIPanelButtonTemplate")
@@ -957,13 +1015,13 @@ function AHT:CreateMatsBuyDialog()
             AHT:Print("Ungültige Menge!")
             return
         end
-        local dev = tonumber(dlg.devLimitBox:GetText()) or 0
+        local maxPPU = ParseMoney(dlg.maxPriceBox:GetText())
         if not AuctionFrame or not AuctionFrame:IsVisible() then
             AHT:Print(AHT.L["scan_ah_required"])
             return
         end
         dlg:Hide()
-        AHT:StartMatsBuy(dlg.matData, qty, dev)
+        AHT:StartMatsBuy(dlg.matData, qty, maxPPU)
     end)
 
     local btnCancel = CreateFrame("Button", nil, dlg, "UIPanelButtonTemplate")
@@ -1017,8 +1075,7 @@ function AHT:CreateMatsBuyDialog()
     function dlg:RefreshCost()
         if not self.matData then return end
         local qty = tonumber(self.quantityBox:GetText()) or 1
-        local dev = tonumber(self.devLimitBox:GetText()) or 0
-        local allowed = AHT:GetMatsBuyAllowedPPU(self.matData, dev)
+        local allowed = ParseMoney(self.maxPriceBox:GetText())
 
         -- Staleness pruefen (>10 min)
         local cache = AHT.matsOfferCache[self.matData.name]
@@ -1040,15 +1097,28 @@ function AHT:CreateMatsBuyDialog()
             plan = AHT:BuildMatsBuyPlanFromOffers(cache.offers, qty, allowed)
         end
 
+        -- Kaufplan-Zeilen leeren
+        for i = 1, 6 do self.planRows[i]:SetText("") end
+
         if plan and plan.canBuyCount > 0 then
-            self.costLabel:SetText(string.format(AHT.L["mats_buy_estcost"], AHT:FormatMoneyPlain(plan.totalCost)))
-            self.avgBuyLabel:SetText(string.format(AHT.L["mats_buy_avg_buy"], AHT:FormatMoneyPlain(plan.avgPPU)))
-            self.maxBuyLabel:SetText(string.format(AHT.L["mats_buy_max_buy"], AHT:FormatMoneyPlain(allowed)))
+            local suffix = ""
+            if not plan.enough then
+                suffix = string.format(" |cffff8800(%d fehlen)|r", qty - plan.canBuyCount)
+            end
+            self.planHeaderLabel:SetText(string.format("|cffffff00Kaufplan:|r %d von %d beschaffbar%s", plan.canBuyCount, qty, suffix))
+            local steps = plan.steps or {}
+            for i = 1, getn(steps) do
+                if i > 6 then break end
+                local s = steps[i]
+                self.planRows[i]:SetText(string.format("%dx @ %s = %s", s.take, AHT:FormatMoneyPlain(s.ppu), AHT:FormatMoneyPlain(s.cost)))
+            end
+            if getn(steps) > 6 then
+                self.planRows[6]:SetText("  ...")
+            end
+            self.planTotalLabel:SetText(string.format("|cffffff00Gesamt:|r %s  (Ø %s/Stk)", AHT:FormatMoneyPlain(plan.totalCost), AHT:FormatMoneyPlain(plan.avgPPU)))
         else
-            local fallback = (self.matData.currentPrice or 0) * qty
-            self.costLabel:SetText(string.format(AHT.L["mats_buy_estcost"], AHT:FormatMoneyPlain(fallback)))
-            self.avgBuyLabel:SetText(string.format(AHT.L["mats_buy_avg_buy"], AHT:FormatMoneyPlain(self.matData.currentPrice or 0)))
-            self.maxBuyLabel:SetText(string.format(AHT.L["mats_buy_max_buy"], AHT:FormatMoneyPlain(allowed)))
+            self.planHeaderLabel:SetText("|cffff4444Keine Angebote im Preislimit|r")
+            self.planTotalLabel:SetText("")
         end
     end
 
@@ -1083,7 +1153,7 @@ function AHT:PrepareMatsBuyExecution()
         AHT.matsBuyItem,
         AHT.matsBuyTargetQty,
         AHT:FormatMoney(plan.avgPPU),
-        AHT:FormatMoney(plan.maxPPU)))
+        AHT:FormatMoney(AHT.matsBuyAllowedPPU)))
 
     AHT.matsBuyPhase = "execute"
     AHT.matsBuyPage = 0
@@ -1092,7 +1162,7 @@ function AHT:PrepareMatsBuyExecution()
     AHT.matsBuySentTimer = 0
 end
 
-function AHT:StartMatsBuy(matData, quantity, deviationMax)
+function AHT:StartMatsBuy(matData, quantity, maxPPU)
     if not matData or not matData.name or quantity <= 0 then return end
     if AHT:IsMatsBuying() then
         AHT:Print(AHT.L["mats_buy_already_running"])
@@ -1101,8 +1171,7 @@ function AHT:StartMatsBuy(matData, quantity, deviationMax)
 
     AHT.matsBuyItem = matData.name
     AHT.matsBuyQuantity = quantity
-    AHT.matsBuyDeviationMax = tonumber(deviationMax) or 0
-    AHT.matsBuyAllowedPPU = AHT:GetMatsBuyAllowedPPU(matData, AHT.matsBuyDeviationMax)
+    AHT.matsBuyAllowedPPU = math.floor(maxPPU or 0)
 
     if AHT.matsBuyAllowedPPU <= 0 then
         AHT:Print(AHT.L["mats_buy_no_avg"])
@@ -1209,16 +1278,8 @@ function AHT:OnMatsBuyAuctionListUpdate()
         return
     end
 
-    local chosen = nil
-    for _, o in ipairs(offers) do
-        if o.count <= need then
-            chosen = o
-            break
-        end
-    end
-    if not chosen then
-        chosen = offers[1]
-    end
+    -- Immer das guenstigste Angebot zuerst (offers ist bereits nach ppu ASC sortiert)
+    local chosen = offers[1]
 
     if chosen then
         if GetMoney() < chosen.buyout then
@@ -1254,6 +1315,8 @@ function AHT:OnMatsBidPlaced()
 
     AHT.matsBuyBought = AHT.matsBuyBought + p.count
     AHT.matsBuySpent = AHT.matsBuySpent + p.buyout
+    -- Session-Gedaechtnis: merken fuer spaetere Kaufkalkulationen
+    AHT.sessionBought[p.name] = (AHT.sessionBought[p.name] or 0) + p.count
 
     AHT:Print(string.format(AHT.L["buy_purchased"], p.count, p.name, AHT:FormatMoney(p.buyout), AHT:FormatMoney(p.ppu)))
 

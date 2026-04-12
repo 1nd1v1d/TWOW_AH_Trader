@@ -214,21 +214,23 @@ Die Material-Analyse ermöglicht es, beliebige Materialien zu überwachen und de
 
 - **Rechtsklick** auf ein Material öffnet den Kaufdialog (Design analog zum "Zutaten kaufen"-Dialog der Trank-Analyse)
 - Gewünschte Menge eingeben
-- Optional: **Max. Abweichung (%)** festlegen (negative und positive Werte möglich)
-   - Positive Werte: Kaufe bis zu X % unter dem Weighted-Avg (z. B. `10` = `-10%`)
-   - Negative Werte: Erlaubt höhere Preise (z. B. `-5` = bis zu `+5%` über Weighted-Avg)
-   - Der angezeigte **Max Kaufpreis** aktualisiert sich sofort auf Basis dieser Eingabe
-- Anzeige im Dialog:
-   - Geschätzte Gesamtkosten
-   - **Ø Kaufpreis**
-   - **Max Kaufpreis**
+- **Max. Kaufpreis**: direkter Kupferpreis als Eingabe (z. B. `5g 20s 10c` oder `90c`)
+   - Wird beim Öffnen des Dialogs automatisch auf den gewichteten Durchschnitt des Materials vorausgefüllt
+   - Erlaubt Eingabe in der Form: `Xg Ys Zc`, `Xs Yc`, `Xc` oder reine Kupferzahl
+   - Nur Ziffern + `g`/`s`/`c` als Eingabe erlaubt
+- **Kaufplan-Vorschau** wird live aus dem gecachten AH-Bestand berechnet:
+   - Zeigt `Kaufplan: X von Y beschaffbar` mit Hinweis auf fehlende Menge
+   - Bis zu 6 Preisstufen: `15x @ 85c = 12g 75c`
+   - Zusammenfassung: `Gesamt: 21g 62c (Ø 1g 12c/Stk)`
+   - Bei keinen passenden Angeboten: Hinweis in Rot
 - **Veraltete Daten (>10 Minuten)**: Roter Warnhinweis erscheint + "Neu scannen"-Button
    - "Neu scannen" scannt **nur das aktuell ausgewählte Material** (nicht alle)
    - Nach abgeschlossenem Scan wird der Kaufdialog automatisch mit neuen Preisen aktualisiert
    - Während des Scans ist der Button deaktiviert
 - **Kaufen** startet den Mats-Kauf-Workflow (unabhängig vom Trank-Buyer)
 - Kein automatischer Rescan mehr beim Kauf – der Nutzer entscheidet aktiv
-- Einkauf erfolgt aus den **günstigsten verfügbaren Angeboten zuerst** (nach Stückpreis)
+- Einkauf erfolgt immer aus den **günstigsten verfügbaren Angeboten zuerst** (nach Stückpreis aufsteigend sortiert)
+- Chat-Meldung beim Kauf zeigt den eingegebenen Maximalpreis (nicht den teuersten tatsächlich gefundenen Preis)
 
 ### Gewichtungsformel
 
@@ -374,6 +376,34 @@ SavedVariable `TWOW_AHT_DB` speichert:
 
 ## Änderungsprotokoll
 
+### v1.7.0 – 2026-04-12
+**Mats-Kaufdialog Überarbeitung + Session-Kaufgedächtnis:**
+
+**Mats-Kaufdialog:**
+- **Max. Abweichung (%)** durch **Max. Kaufpreis** ersetzt: Direkteingabe des Maximalpreises in Kupfer (`5g 20s 10c`, `90c` etc.)
+- Kaufpreis-Feld beim Öffnen automatisch auf gewichteten Durchschnitt vorausgefüllt
+- `ParseMoney()` Hilfsfunktion: parst Preisangaben mit Einheiten (g/s/c) Lua 5.0 kompatibel
+- `FormatMoneyInput()` Hilfsfunktion: formatiert Kupferwerte für Eingabefelder ohne Farb-Codes
+- Kauffeld als custom Frame (kein `InputBoxTemplate`) mit `SetBackdrop` für korrekte Darstellung
+- **Kaufplan-Vorschau** ersetzt die bisherige einfache Kostenanzeige:
+  - Aufschlüsselung nach Preisstufen (bis zu 6 Zeilen): `15x @ 85c = 12g 75c`
+  - Gesamtzeile: `Gesamt: 21g 62c (Ø 1g 12c/Stk)`
+  - Hinweis wenn nicht alle benötigten Stücke verfügbar sind
+  - `BuildMatsBuyPlanFromOffers()` gibt jetzt `steps`-Array zurück (gleichpreisige Angebote zusammengefasst)
+- Dialog-Höhe auf 420px erhöht (Platz für Kaufplan)
+- Chat-Meldung beim Kauf zeigt korrekt den **eingegebenen Maximalpreis** (nicht den teuersten Preis im Plan)
+- Execute-Phase: Angebote werden immer nach Stückpreis aufsteigend sortiert – **günstigstes zuerst** (keine Logik mehr, die kleinere Stacks bevorzugt)
+
+**Session-Kaufgedächtnis:**
+- Neues `AHT.sessionBought` – Tabelle `[itemName] = Anzahl` merkt sich alle Käufe der aktuellen AH-Sitzung
+- Beim Aufbau der Einkaufsliste für einen neuen Trank wird `sessionBought` zusätzlich zum Inventar berücksichtigt (`actualNeeded = totalNeeded - inBags - sessionBought`)
+- Verhindert Doppelkäufe von Materialien die noch im Briefkasten liegen
+- Log-Meldung "X in Taschen (brauche Y)" zeigt kombinierten Wert aus Taschen + Session-Käufen
+- Mats-Buyer trägt ebenfalls in `sessionBought` ein
+- `sessionBought` wird in `OnAHClosed()` automatisch geleert
+
+---
+
 ### v1.6.0 – 2026-04-09
 **Mats-Analyse + Materialverwaltung + gewichtete Historie:**
 - Neuer AH-Button **Mats Analyse** (separat zur Trank-Analyse)
@@ -424,6 +454,7 @@ SavedVariable `TWOW_AHT_DB` speichert:
 **Auto-Post, Inventar-Check, Preisverlauf, Volumen, Schnäppchen-Scanner:**
 - **Auto-Post (Poster.lua)**: Tränke aus dem Inventar per Shift+Rechtsklick ins AH posten mit automatischer Preisberechnung (Undercut um 1c, Minimum: Kosten × 1,05)
 - **Inventar-Check**: Vor dem Zutaten-Kauf werden vorhandene Items in den Taschen geprüft und von der Kaufmenge abgezogen
+- **Session-Kaufgedächtnis**: Innerhalb einer AH-Sitzung werden bereits gekaufte Mengen pro Item gespeichert (`AHT.sessionBought`). Beim nächsten Kauf (z. B. anderer Trank, gleiches Material) werden diese Mengen als "vorhanden" behandelt – auch wenn die Items noch im Briefkasten liegen und nicht im Inventar sichtbar sind. Das Gedächtnis wird beim Schließen des Auktionshauses automatisch geleert.
 - **Preisverlauf**: Historische Preise (letzte 20 Scans) werden gespeichert, Durchschnittspreis und Trend (▲ steigend / ▼ fallend / → stabil) berechnet
 - **Marktvolumen**: Anzahl der AH-Listings pro Item wird beim Scan erfasst und im Tooltip angezeigt
 - **Schnäppchen-Scanner**: Items mit ≥ 20 % Rabatt vs. Durchschnitt werden als Deal erkannt, im Chat gemeldet und in der Liste mit `*` markiert
