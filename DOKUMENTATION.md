@@ -401,6 +401,7 @@ SavedVariable `TWOW_AHT_DB` speichert:
 - Log-Meldung "X in Taschen (brauche Y)" zeigt kombinierten Wert aus Taschen + Session-Käufen
 - Mats-Buyer trägt ebenfalls in `sessionBought` ein
 - `sessionBought` wird in `OnAHClosed()` automatisch geleert
+- **Bugfix v1.7.1**: `sessionBought` wird jetzt pro Rezept-Name indexiert (`[rezeptName][itemName]`), nicht mehr global pro Item. Dadurch können zwei verschiedene Tränke mit gleichen Zutaten unabhängig voneinander gekauft werden, ohne sich gegenseitig zu blockieren. Der Mats-Buyer trägt nicht mehr in `sessionBought` ein.
 
 ---
 
@@ -454,7 +455,7 @@ SavedVariable `TWOW_AHT_DB` speichert:
 **Auto-Post, Inventar-Check, Preisverlauf, Volumen, Schnäppchen-Scanner:**
 - **Auto-Post (Poster.lua)**: Tränke aus dem Inventar per Shift+Rechtsklick ins AH posten mit automatischer Preisberechnung (Undercut um 1c, Minimum: Kosten × 1,05)
 - **Inventar-Check**: Vor dem Zutaten-Kauf werden vorhandene Items in den Taschen geprüft und von der Kaufmenge abgezogen
-- **Session-Kaufgedächtnis**: Innerhalb einer AH-Sitzung werden bereits gekaufte Mengen pro Item gespeichert (`AHT.sessionBought`). Beim nächsten Kauf (z. B. anderer Trank, gleiches Material) werden diese Mengen als "vorhanden" behandelt – auch wenn die Items noch im Briefkasten liegen und nicht im Inventar sichtbar sind. Das Gedächtnis wird beim Schließen des Auktionshauses automatisch geleert.
+- **Session-Kaufgedächtnis**: Innerhalb einer AH-Sitzung werden bereits gekaufte Mengen pro Rezept gespeichert (`AHT.sessionBought[rezeptName][itemName]`). Bein nächsten Kauf desselben Tranks werden die bereits gekauften Mengen als "vorhanden" behandelt – auch wenn die Items noch im Briefkasten liegen. Verschiedene Tränke mit gleichen Zutaten beeinflussen sich **nicht gegenseitig**, da das Gedächtnis pro Rezept-Name getrennt geführt wird. Das Gedächtnis wird beim Schließen des Auktionshauses automatisch geleert. Der Mats-Buyer nutzt kein Session-Gedächtnis, da der User die Menge dort explizit eingibt.
 - **Preisverlauf**: Historische Preise (letzte 20 Scans) werden gespeichert, Durchschnittspreis und Trend (▲ steigend / ▼ fallend / → stabil) berechnet
 - **Marktvolumen**: Anzahl der AH-Listings pro Item wird beim Scan erfasst und im Tooltip angezeigt
 - **Schnäppchen-Scanner**: Items mit ≥ 20 % Rabatt vs. Durchschnitt werden als Deal erkannt, im Chat gemeldet und in der Liste mit `*` markiert

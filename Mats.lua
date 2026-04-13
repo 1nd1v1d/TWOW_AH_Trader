@@ -1315,8 +1315,6 @@ function AHT:OnMatsBidPlaced()
 
     AHT.matsBuyBought = AHT.matsBuyBought + p.count
     AHT.matsBuySpent = AHT.matsBuySpent + p.buyout
-    -- Session-Gedaechtnis: merken fuer spaetere Kaufkalkulationen
-    AHT.sessionBought[p.name] = (AHT.sessionBought[p.name] or 0) + p.count
 
     AHT:Print(string.format(AHT.L["buy_purchased"], p.count, p.name, AHT:FormatMoney(p.buyout), AHT:FormatMoney(p.ppu)))
 
