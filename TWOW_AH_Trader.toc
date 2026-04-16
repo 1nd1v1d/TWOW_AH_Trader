@@ -2,7 +2,7 @@
 ## Title: TWOW AH Trader
 ## Notes: Scannt AH-Preise fuer Traenke/Elixiere und berechnet Herstellungsmargen
 ## Author: TWOW_AHT
-## Version: 1.4.0
+## Version: 1.6.0
 ## SavedVariables: TWOW_AHT_DB
 
 Core.lua
@@ -14,3 +14,4 @@ Buyer.lua
 Poster.lua
 UI.lua
 Mats.lua
+Transmute.lua

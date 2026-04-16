@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-WoW-Addon für Turtle WoW (1.12.1 vanilla), das AH-Preise von Alchemie-Tränken und deren Zutaten scannt, die Herstellungsmargen berechnet und eine Empfehlung für den profitabelsten Trank ausspricht. Zusätzlich gibt es eine separate Mats-Analyse für frei definierbare Materialien mit historisch gewichteter Preisbewertung. Optional können Zutaten direkt aus dem AH gekauft werden, wobei eine Mindestmarge von 10 % eingehalten wird.
+WoW-Addon für Turtle WoW (1.12.1 vanilla), das AH-Preise von Alchemie-Tränken und deren Zutaten scannt, die Herstellungsmargen berechnet und eine Empfehlung für den profitabelsten Trank ausspricht. Zusätzlich gibt es eine separate Mats-Analyse für frei definierbare Materialien mit historisch gewichteter Preisbewertung sowie eine eigene Arkanit-Transmute-Analyse zur Berechnung der Transmutegebühr aus Arkanitbarren, Thoriumbarren und Arkankristall. Optional können Zutaten direkt aus dem AH gekauft werden, wobei eine Mindestmarge von 10 % eingehalten wird.
 
 ## Dateistruktur
 
@@ -18,6 +18,7 @@ TWOW_AH_Trader/
 ├── Poster.lua            – Automatisches AH-Posten von Tränken
 ├── UI.lua                – Scrollbares Ergebnisfenster + Kaufdialog
 ├── Mats.lua              – Materialverwaltung + Mats-Analyse UI + Mats-Kaufdialog
+├── Transmute.lua         – Arkanit-Transmute-Scan, UI und Tooltip-Hook
 └── DOKUMENTATION.md      – Diese Datei
 ```
 
@@ -38,7 +39,7 @@ Zusatz-Workflow:
 ## Benutzung
 
 1. **Alchemie-Fenster öffnen** → Addon lädt automatisch alle bekannten Rezepte.
-2. **Auktionshaus öffnen** → Buttons "Trank-Analyse" und "Mats Analyse" erscheinen.
+2. **Auktionshaus öffnen** → Buttons "Trank-Analyse", "Mats Analyse" und "Arkanit-Transmute" erscheinen.
 3. **Trank-Analyse öffnen** → gespeicherte Ergebnisse ansehen und Rezepte auswählen.
 4. **"Scannen" klicken** → AH-Scan für Tränke/Zutaten starten.
 5. **Kostendetails einsehen** → Maus über eine Zeile halten (Tooltip).
@@ -46,6 +47,7 @@ Zusatz-Workflow:
 7. **Mats verwalten** → `/aht mats` öffnen, Materialien hinzufügen/entfernen.
 8. **Mats scannen** → im Mats-Fenster ausgewählte Materialien scannen.
 9. **Preisabweichungen nutzen** → aktueller Preis vs. gewichteter Durchschnitt.
+10. **Arkanit-Transmute prüfen** → Arkanitbarren, Thoriumbarren und Arkankristall im AH scannen und die Gebühr anzeigen lassen.
 
 ## Slash-Befehle
 
@@ -92,6 +94,13 @@ Zusatz-Workflow:
 - Rechtsklick auf ein Material öffnet den Mats-Kaufdialog
 - Spalten: aktueller Preis, gewichteter Durchschnitt, Abweichung, Listings, Scans
 - In der Materialspalte wird hinter dem Namen das letzte Scan-Datum mit Uhrzeit angezeigt
+
+### Arkanit-Transmute Fenster
+- Separater AH-Button **"Arkanit-Transmute"** neben Trank- und Mats-Analyse
+- Scannt genau drei Items: **Arkanitbarren**, **Thoriumbarren** und **Arkankristall**
+- Berechnet die **Transmutegebühr** als `Verkaufspreis Arkanitbarren - Thoriumbarren - Arkankristall`
+- Zeigt Verkaufspreis, Rohstoffkosten, Gebühr, AH-Listings und Aktualisierungszeit kompakt in einem eigenen Fenster
+- Mouseover auf **Arkanitbarren** erweitert den Tooltip um die zuletzt gescannte Transmutegebühr und die Preisaufschlüsselung
 
 ### Material-Management Dialog
 - Öffnen über `/aht mats`
@@ -231,6 +240,34 @@ Die Material-Analyse ermöglicht es, beliebige Materialien zu überwachen und de
 - Kein automatischer Rescan mehr beim Kauf – der Nutzer entscheidet aktiv
 - Einkauf erfolgt immer aus den **günstigsten verfügbaren Angeboten zuerst** (nach Stückpreis aufsteigend sortiert)
 - Chat-Meldung beim Kauf zeigt den eingegebenen Maximalpreis (nicht den teuersten tatsächlich gefundenen Preis)
+
+## Arkanit-Transmute
+
+Die Arkanit-Transmute-Analyse ist für den Alchemie-Skill **"Transmutieren: Arkanit"** gedacht.
+
+### Funktionsweise
+
+1. Im Auktionshaus **"Arkanit-Transmute"** anklicken.
+2. Im Fenster **"Scannen"** drücken.
+3. Das Addon scannt den günstigsten Buyout pro Stück für:
+    - Arkanitbarren
+    - Thoriumbarren
+    - Arkankristall
+4. Daraus wird die Transmutegebühr berechnet:
+
+```text
+Transmutegebuehr = Preis(Arkanitbarren) - Preis(Thoriumbarren) - Preis(Arkankristall)
+```
+
+### Tooltip-Integration
+
+- Nach einem erfolgreichen Scan zeigt der Mouseover-Tooltip für **Arkanitbarren** automatisch:
+   - Verkaufspreis des Barrens
+   - Preis von Thoriumbarren
+   - Preis von Arkankristall
+   - Rohstoffsumme
+   - berechnete Transmutegebühr
+- Falls noch kein Scan vorliegt, erscheint im Tooltip ein kurzer Hinweis darauf.
 
 ### Gewichtungsformel
 

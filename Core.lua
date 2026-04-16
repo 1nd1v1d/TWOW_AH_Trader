@@ -7,7 +7,7 @@
 TWOW_AHT = {}
 local AHT = TWOW_AHT
 
-AHT.VERSION = "1.5.0"
+AHT.VERSION = "1.6.0"
 
 -- Laufzeit-Daten
 AHT.prices    = {}   -- [itemName] = guenstigster Buyout pro Stueck (Kupfer)
@@ -29,6 +29,10 @@ AHT.matsSortMode    = "deviation"  -- "name", "current", "deviation", "weighted_
 AHT.matsSortDir     = "desc"        -- "asc" oder "desc"
 AHT.matsSearchFilter = ""
 AHT.matsButton      = nil           -- Referenz zum Mats-Button
+
+-- ── Arkanit-Transmute Analyse ───────────────────────────────
+AHT.transmuteButton = nil
+AHT.transmuteResult = nil
 
 AHT.sessionBought   = {}   -- [itemName] = Anzahl diese AH-Session gekauft (Briefkasten-Puffer)
 
@@ -280,6 +284,9 @@ function AHT:OnLoad()
     for name, price in pairs(AHT.vendorPrices) do
         AHT.prices[name] = price
     end
+    if AHT.HookTransmuteTooltip then
+        AHT:HookTransmuteTooltip()
+    end
     AHT:Print(string.format(AHT.L["addon_loaded"], AHT.VERSION))
 end
 
@@ -412,6 +419,8 @@ evtFrame:SetScript("OnEvent", function()
             AHT:OnMatsBuyAuctionListUpdate()
         elseif AHT:IsBuying() then
             AHT:OnBuyAuctionListUpdate()
+        elseif AHT.IsTransmuteScanning and AHT:IsTransmuteScanning() then
+            AHT:OnTransmuteAuctionListUpdate()
         elseif AHT:IsMatScanning() then
             AHT:OnMatsAuctionListUpdate()
         else
@@ -450,6 +459,9 @@ evtFrame:SetScript("OnUpdate", function()
     end
     if AHT:IsMatScanning() then
         AHT:OnUpdateMats(dt)
+    end
+    if AHT.IsTransmuteScanning and AHT:IsTransmuteScanning() then
+        AHT:OnUpdateTransmute(dt)
     end
     if AHT.IsMatsBuying and AHT:IsMatsBuying() then
         AHT:OnMatsBuyUpdate(dt)
@@ -493,6 +505,9 @@ function AHT:OnAHClosed()
     end
     if AHT:IsMatScanning() then
         AHT:CancelMatsScan()
+    end
+    if AHT.IsTransmuteScanning and AHT:IsTransmuteScanning() then
+        AHT:CancelTransmuteScan()
     end
     if AHT.IsMatsBuying and AHT:IsMatsBuying() then
         AHT:CancelMatsBuy(true)

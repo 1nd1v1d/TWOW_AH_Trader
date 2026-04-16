@@ -33,6 +33,9 @@ AHT.lastScanTime = nil    -- GetTime() beim letzten abgeschlossenen Scan
 function AHT:OnAHShow()
     AHT:CreateScanButton()
     AHT:CreateMatsButton()
+    if AHT.CreateTransmuteButton then
+        AHT:CreateTransmuteButton()
+    end
 end
 
 -- ── Scan-Button ──────────────────────────────────────────────
