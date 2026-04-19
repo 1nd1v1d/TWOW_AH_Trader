@@ -7,7 +7,7 @@
 TWOW_AHT = {}
 local AHT = TWOW_AHT
 
-AHT.VERSION = "1.6.0"
+AHT.VERSION = "1.5.0"
 
 -- Laufzeit-Daten
 AHT.prices    = {}   -- [itemName] = guenstigster Buyout pro Stueck (Kupfer)
@@ -29,10 +29,6 @@ AHT.matsSortMode    = "deviation"  -- "name", "current", "deviation", "weighted_
 AHT.matsSortDir     = "desc"        -- "asc" oder "desc"
 AHT.matsSearchFilter = ""
 AHT.matsButton      = nil           -- Referenz zum Mats-Button
-
--- ── Arkanit-Transmute Analyse ───────────────────────────────
-AHT.transmuteButton = nil
-AHT.transmuteResult = nil
 
 AHT.sessionBought   = {}   -- [itemName] = Anzahl diese AH-Session gekauft (Briefkasten-Puffer)
 
@@ -121,6 +117,73 @@ function AHT:TableCount(t)
     local n = 0
     for _ in pairs(t) do n = n + 1 end
     return n
+end
+
+local function NormalizeAuctionLabel(label)
+    if not label then return nil end
+    label = string.gsub(label, "^%s*(.-)%s*$", "%1")
+    if label == "" then return nil end
+    label = string.gsub(label, "%s+", " ")
+    return strlower(label)
+end
+
+function AHT:RefreshAuctionQueryCaches()
+    if not GetAuctionItemClasses or not GetAuctionItemSubClasses then
+        return
+    end
+
+    local classMap = {}
+    local subClassMap = {}
+    local classes = { GetAuctionItemClasses() }
+
+    for classIndex, className in ipairs(classes) do
+        local normClass = NormalizeAuctionLabel(className)
+        if normClass then
+            classMap[normClass] = classIndex
+        end
+
+        local currentSubMap = {}
+        local subClasses = { GetAuctionItemSubClasses(classIndex) }
+        for subClassIndex, subClassName in ipairs(subClasses) do
+            local normSubClass = NormalizeAuctionLabel(subClassName)
+            if normSubClass then
+                currentSubMap[normSubClass] = subClassIndex
+            end
+        end
+        subClassMap[classIndex] = currentSubMap
+    end
+
+    AHT.auctionClassNameToIndex = classMap
+    AHT.auctionSubClassNameToIndex = subClassMap
+end
+
+function AHT:GetAuctionQueryFilters(itemName, preferredClassId)
+    if (not AHT.auctionClassNameToIndex or not next(AHT.auctionClassNameToIndex))
+       and AuctionFrame and AuctionFrame:IsVisible() then
+        AHT:RefreshAuctionQueryCaches()
+    end
+
+    local classIndex = preferredClassId
+    local subClassIndex = nil
+
+    if GetItemInfo and itemName then
+        local _, _, _, _, _, itemType, itemSubType = GetItemInfo(itemName)
+        local normType = NormalizeAuctionLabel(itemType)
+        local normSubType = NormalizeAuctionLabel(itemSubType)
+
+        if not classIndex and normType and AHT.auctionClassNameToIndex then
+            classIndex = AHT.auctionClassNameToIndex[normType]
+        end
+
+        if classIndex and normSubType and AHT.auctionSubClassNameToIndex then
+            local subClassMap = AHT.auctionSubClassNameToIndex[classIndex]
+            if subClassMap then
+                subClassIndex = subClassMap[normSubType]
+            end
+        end
+    end
+
+    return nil, classIndex, subClassIndex
 end
 
 -- Prueft ob ein Item ein Vendor-Item ist
@@ -284,9 +347,6 @@ function AHT:OnLoad()
     for name, price in pairs(AHT.vendorPrices) do
         AHT.prices[name] = price
     end
-    if AHT.HookTransmuteTooltip then
-        AHT:HookTransmuteTooltip()
-    end
     AHT:Print(string.format(AHT.L["addon_loaded"], AHT.VERSION))
 end
 
@@ -419,8 +479,6 @@ evtFrame:SetScript("OnEvent", function()
             AHT:OnMatsBuyAuctionListUpdate()
         elseif AHT:IsBuying() then
             AHT:OnBuyAuctionListUpdate()
-        elseif AHT.IsTransmuteScanning and AHT:IsTransmuteScanning() then
-            AHT:OnTransmuteAuctionListUpdate()
         elseif AHT:IsMatScanning() then
             AHT:OnMatsAuctionListUpdate()
         else
@@ -460,9 +518,6 @@ evtFrame:SetScript("OnUpdate", function()
     if AHT:IsMatScanning() then
         AHT:OnUpdateMats(dt)
     end
-    if AHT.IsTransmuteScanning and AHT:IsTransmuteScanning() then
-        AHT:OnUpdateTransmute(dt)
-    end
     if AHT.IsMatsBuying and AHT:IsMatsBuying() then
         AHT:OnMatsBuyUpdate(dt)
     end
@@ -479,9 +534,10 @@ evtFrame:SetScript("OnUpdate", function()
         if pc.timer >= 0.3 then
             pc.timer = 0
             if CanSendAuctionQuery() then
+                local invTypeIndex, classIndex, subClassIndex = AHT:GetAuctionQueryFilters(pc.name)
                 pc.state = "sent"
                 pc.sentTimer = 0
-                QueryAuctionItems(pc.name, nil, nil, nil, nil, nil, pc.page, nil, nil)
+                QueryAuctionItems(pc.name, nil, nil, invTypeIndex, classIndex, subClassIndex, pc.page, nil, nil)
             end
         end
     elseif pc and pc.state == "sent" then
@@ -505,9 +561,6 @@ function AHT:OnAHClosed()
     end
     if AHT:IsMatScanning() then
         AHT:CancelMatsScan()
-    end
-    if AHT.IsTransmuteScanning and AHT:IsTransmuteScanning() then
-        AHT:CancelTransmuteScan()
     end
     if AHT.IsMatsBuying and AHT:IsMatsBuying() then
         AHT:CancelMatsBuy(true)

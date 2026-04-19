@@ -187,9 +187,10 @@ function AHT:OnBuyUpdate(elapsed)
             AHT.buyTimer = 0
             if CanSendAuctionQuery() then
                 local item = AHT.buyList[AHT.buyListIdx]
+                local invTypeIndex, classIndex, subClassIndex = AHT:GetAuctionQueryFilters(item.name)
                 AHT.buySentTimer = 0
                 AHT.buyState = "buying"
-                QueryAuctionItems(item.name, nil, nil, nil, nil, nil, AHT.buyPage, nil, nil)
+                QueryAuctionItems(item.name, nil, nil, invTypeIndex, classIndex, subClassIndex, AHT.buyPage, nil, nil)
             end
         end
 

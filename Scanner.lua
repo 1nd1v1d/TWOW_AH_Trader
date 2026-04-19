@@ -31,6 +31,7 @@ AHT.lastScanTime = nil    -- GetTime() beim letzten abgeschlossenen Scan
 
 -- ── AH oeffnen ───────────────────────────────────────────────
 function AHT:OnAHShow()
+    AHT:RefreshAuctionQueryCaches()
     AHT:CreateScanButton()
     AHT:CreateMatsButton()
     if AHT.CreateTransmuteButton then
@@ -209,9 +210,10 @@ function AHT:OnUpdate(elapsed)
             AHT.scanTimer = 0
             -- Nur senden wenn AH bereit ist
             if CanSendAuctionQuery() then
+                local invTypeIndex, classIndex, subClassIndex = AHT:GetAuctionQueryFilters(AHT.currentItem)
                 AHT.sentTimer = 0
                 AHT.scanState = "sent"
-                QueryAuctionItems(AHT.currentItem, nil, nil, nil, nil, nil, AHT.scanPage, nil, nil)
+                QueryAuctionItems(AHT.currentItem, nil, nil, invTypeIndex, classIndex, subClassIndex, AHT.scanPage, nil, nil)
             end
         end
 
@@ -631,10 +633,13 @@ function AHT:OnUpdateMats(elapsed)
         if AHT.matsScanTimer >= AHT.SCAN_DELAY then
             AHT.matsScanTimer = 0
             if CanSendAuctionQuery() then
-                local catId = AHT:GetMatCategoryId(AHT.matsCurrentItem)
+                local invTypeIndex, classIndex, subClassIndex = AHT:GetAuctionQueryFilters(
+                    AHT.matsCurrentItem,
+                    AHT:GetMatCategoryId(AHT.matsCurrentItem)
+                )
                 AHT.matsSentTimer = 0
                 AHT.matsScanState = "sent"
-                QueryAuctionItems(AHT.matsCurrentItem, nil, nil, nil, catId, nil, AHT.matsCurrentPage, nil, nil)
+                QueryAuctionItems(AHT.matsCurrentItem, nil, nil, invTypeIndex, classIndex, subClassIndex, AHT.matsCurrentPage, nil, nil)
             end
         end
 

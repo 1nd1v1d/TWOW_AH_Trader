@@ -268,9 +268,10 @@ function AHT:OnUpdateTransmute(elapsed)
         if AHT.transmuteScanTimer >= AHT.SCAN_DELAY then
             AHT.transmuteScanTimer = 0
             if CanSendAuctionQuery() then
+                local invTypeIndex, classIndex, subClassIndex = AHT:GetAuctionQueryFilters(AHT.transmuteCurrentItem)
                 AHT.transmuteSentTimer = 0
                 AHT.transmuteScanState = "sent"
-                QueryAuctionItems(AHT.transmuteCurrentItem, nil, nil, nil, nil, nil, AHT.transmuteCurrentPage, nil, nil)
+                QueryAuctionItems(AHT.transmuteCurrentItem, nil, nil, invTypeIndex, classIndex, subClassIndex, AHT.transmuteCurrentPage, nil, nil)
             end
         end
     elseif AHT.transmuteScanState == "sent" then

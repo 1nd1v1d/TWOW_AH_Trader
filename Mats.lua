@@ -1199,10 +1199,13 @@ function AHT:OnMatsBuyUpdate(elapsed)
         if AHT.matsBuyTimer >= AHT.SCAN_DELAY then
             AHT.matsBuyTimer = 0
             if CanSendAuctionQuery() then
-                local catId = AHT:GetMatCategoryId(AHT.matsBuyItem)
+                local invTypeIndex, classIndex, subClassIndex = AHT:GetAuctionQueryFilters(
+                    AHT.matsBuyItem,
+                    AHT:GetMatCategoryId(AHT.matsBuyItem)
+                )
                 AHT.matsBuySentTimer = 0
                 AHT.matsBuyState = "sent"
-                QueryAuctionItems(AHT.matsBuyItem, nil, nil, nil, catId, nil, AHT.matsBuyPage, nil, nil)
+                QueryAuctionItems(AHT.matsBuyItem, nil, nil, invTypeIndex, classIndex, subClassIndex, AHT.matsBuyPage, nil, nil)
             end
         end
     else
